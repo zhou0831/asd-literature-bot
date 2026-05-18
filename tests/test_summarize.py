@@ -2,7 +2,8 @@ from src.models import LiteratureItem
 from src.summarize import render_daily_report, summarize_article_in_chinese
 
 
-def test_daily_report_uses_chinese_overview_not_raw_english_abstract():
+def test_daily_report_uses_chinese_overview_not_raw_english_abstract(monkeypatch):
+    monkeypatch.setattr("src.summarize.generate_article_overview_with_mimo", lambda item: None)
     item = LiteratureItem(
         title="Joint attention and autism",
         abstract=(
@@ -20,4 +21,3 @@ def test_daily_report_uses_chinese_overview_not_raw_english_abstract():
     assert "这篇文章主要讨论" in overview
     assert "共同注意" in overview
     assert "Purpose This study examined" not in report
-

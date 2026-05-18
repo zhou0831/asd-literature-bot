@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 import re
 
+from .llm import generate_article_overview_with_mimo
 from .models import LiteratureItem
 
 
@@ -55,6 +56,14 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 
 
 def summarize_article_in_chinese(item: LiteratureItem) -> str:
+    try:
+        mimo_overview = generate_article_overview_with_mimo(item)
+    except Exception as exc:
+        print(f"Warning: Mimo overview generation failed, using rule-based fallback: {exc}")
+        mimo_overview = None
+    if mimo_overview:
+        return mimo_overview
+
     text = _clean_text(f"{item.title}. {item.abstract}")
     if not item.abstract.strip():
         return (

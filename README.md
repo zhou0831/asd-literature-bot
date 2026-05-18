@@ -4,7 +4,7 @@
 
 它每天检索候选文献，和 Zotero 目标 collection 及历史推荐记录去重，选出 1 篇生成中文日报，并通过 Gmail 发到 `MAIL_TO`。每周会汇总最近推荐记录，选出 Top 3 生成周报。Zotero 导入必须手动确认，不会自动写入。
 
-日报里的“文章讲了什么”会用题名、摘要和关键词生成中文概述，不直接粘贴英文摘要。当前版本是规则化中文概述；如果后续需要更接近人工阅读笔记的翻译和讲解，可以再接入 `OPENAI_API_KEY` 做 LLM 摘要。
+日报里的“文章讲了什么”会优先使用小米 MiMo 大模型生成中文概述；如果没有配置 `MIMO_API_KEY`，会自动回退到题名、摘要和关键词驱动的规则化中文概述，不直接粘贴英文摘要。
 
 ## 安装
 
@@ -33,7 +33,9 @@ copy .env.example .env
 填写 `.env`：
 
 ```bash
-OPENAI_API_KEY=
+MIMO_API_KEY=
+MIMO_BASE_URL=https://api.xiaomimimo.com/v1
+MIMO_MODEL=mimo-v2.5-pro
 ZOTERO_API_KEY=
 ZOTERO_USER_ID=
 ZOTERO_LIBRARY_TYPE=user
@@ -52,6 +54,19 @@ TIMEZONE=Asia/Shanghai
 
 Gmail SMTP 发送需要 Google 账号开启两步验证，然后生成 16 位 app password。把它放到本地 `.env` 或 GitHub Secrets 的 `GMAIL_APP_PASSWORD`，不要写进代码、README、issue 或日志。
 
+## MiMo 大模型
+
+本项目使用 OpenAI-compatible Chat Completions 调用 MiMo。默认配置：
+
+```bash
+MIMO_BASE_URL=https://api.xiaomimimo.com/v1
+MIMO_MODEL=mimo-v2.5-pro
+```
+
+你只需要把 `MIMO_API_KEY` 放进本地 `.env` 或 GitHub Secrets。`MIMO_BASE_URL` 和 `MIMO_MODEL` 通常不用作为 Secrets；如果以后平台给你的接入地址不同，可以在 GitHub 的 `Settings -> Secrets and variables -> Actions -> Variables` 里添加同名变量覆盖默认值。
+
+如果 `MIMO_API_KEY` 为空，日报仍会正常生成，只是“文章讲了什么”会使用规则化中文概述，而不是大模型生成。
+
 ## GitHub Secrets
 
 仓库页面进入：
@@ -67,7 +82,12 @@ Gmail SMTP 发送需要 Google 账号开启两步验证，然后生成 16 位 ap
 - `MAIL_TO`，值为 `841240617@qq.com`
 - `MAIL_FROM`
 - `GMAIL_APP_PASSWORD`
-- `OPENAI_API_KEY`，第一版暂不依赖它生成报告，但先预留
+- `MIMO_API_KEY`
+
+可选变量，不是 Secrets：
+
+- `MIMO_BASE_URL`，默认 `https://api.xiaomimimo.com/v1`
+- `MIMO_MODEL`，默认 `mimo-v2.5-pro`
 
 ## 本地测试 Gmail
 

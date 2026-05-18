@@ -26,7 +26,9 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python scripts/run_daily.py
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+          MIMO_BASE_URL: ${{ vars.MIMO_BASE_URL }}
+          MIMO_MODEL: ${{ vars.MIMO_MODEL }}
           ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
           ZOTERO_USER_ID: ${{ secrets.ZOTERO_USER_ID }}
           ZOTERO_LIBRARY_TYPE: ${{ secrets.ZOTERO_LIBRARY_TYPE }}
