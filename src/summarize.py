@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 import re
 
-from .llm import generate_article_overview_with_mimo
+from .llm import generate_article_overview_with_mimo, generate_weekly_report_with_mimo
 from .models import LiteratureItem
+
+
+@dataclass(frozen=True)
+class SummaryResult:
+    text: str
+    ai_generated: bool
 
 
 def render_daily_report(item: LiteratureItem, report_date: date | None = None) -> str:
     today = report_date or date.today()
     authors = ", ".join(item.authors[:8]) if item.authors else "作者信息待补充"
-    chinese_overview = summarize_article_in_chinese(item)
+    overview = summarize_article_in_chinese(item)
+    ai_note = _ai_generation_note(overview.ai_generated)
     import_command = f"python scripts/approve_import.py --candidate-id {item.candidate_id} --add-to-zotero"
     return f"""# ASD 文献每日推荐 - {today.isoformat()}
 
@@ -31,7 +39,7 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 
 ## 文章讲了什么
 
-{chinese_overview}
+{overview.text}
 
 ## 我能从中学到什么
 
@@ -52,43 +60,44 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 ```bash
 {import_command}
 ```
+
+{ai_note}
 """
 
 
-def summarize_article_in_chinese(item: LiteratureItem) -> str:
+def summarize_article_in_chinese(item: LiteratureItem) -> SummaryResult:
     try:
         mimo_overview = generate_article_overview_with_mimo(item)
     except Exception as exc:
         print(f"Warning: Mimo overview generation failed, using rule-based fallback: {exc}")
         mimo_overview = None
     if mimo_overview:
-        return mimo_overview
+        return SummaryResult(mimo_overview, ai_generated=True)
 
     text = _clean_text(f"{item.title}. {item.abstract}")
     if not item.abstract.strip():
-        return (
+        return SummaryResult(
             f"这篇文献题名显示，它主要关注“{item.title}”。检索源没有返回可用摘要，"
-            "所以目前只能把它作为候选文献处理；建议打开 DOI/URL 后复核研究对象、任务材料、主要指标和结论。"
+            "所以目前只能把它作为候选文献处理；建议打开 DOI/URL 后复核研究对象、任务材料、主要指标和结论。",
+            ai_generated=False,
         )
 
     topic = _topic_sentence(text)
     design = _design_sentence(text)
     result = _result_sentence(text)
     relevance = _relevance_sentence(item, text)
-    return "\n\n".join([topic, design, result, relevance])
+    return SummaryResult("\n\n".join([topic, design, result, relevance]), ai_generated=False)
 
 
 def render_weekly_report(items: list[LiteratureItem], report_date: date | None = None) -> str:
     today = report_date or date.today()
-    top = sorted(items, key=lambda row: row.score, reverse=True)[:3]
+    ranked = sorted(items, key=lambda row: row.score, reverse=True)
+    top = ranked[:3]
     all_rows = "\n".join(
         f"- {idx}. {item.title} ({item.year or '年份待补充'}) - {item.module} - score {item.score}"
-        for idx, item in enumerate(items, 1)
+        for idx, item in enumerate(ranked, 1)
     ) or "- 本周暂无推荐记录。"
-    top_rows = "\n\n".join(
-        f"### Top {idx}: {item.title}\n\n- candidate_id：{item.candidate_id}\n- 推荐理由：{item.reason}\n- 课题启发：优先检查它对 {item.module} 的操作化定义和实验材料。"
-        for idx, item in enumerate(top, 1)
-    ) or "本周暂无足够候选。"
+    weekly_insight = summarize_weekly_in_chinese(top)
     focus = _next_focus(top)
     return f"""# ASD 文献周总结 - {today.isoformat()}
 
@@ -98,7 +107,7 @@ def render_weekly_report(items: list[LiteratureItem], report_date: date | None =
 
 ## 本周最值得读的 3 篇
 
-{top_rows}
+{weekly_insight.text}
 
 ## 对课题的启发
 
@@ -107,7 +116,25 @@ def render_weekly_report(items: list[LiteratureItem], report_date: date | None =
 ## 下周建议重点关注
 
 {focus}
+
+{_ai_generation_note(weekly_insight.ai_generated)}
 """
+
+
+def summarize_weekly_in_chinese(items: list[LiteratureItem]) -> SummaryResult:
+    try:
+        mimo_summary = generate_weekly_report_with_mimo(items)
+    except Exception as exc:
+        print(f"Warning: Mimo weekly summary failed, using rule-based fallback: {exc}")
+        mimo_summary = None
+    if mimo_summary:
+        return SummaryResult(mimo_summary, ai_generated=True)
+
+    top_rows = "\n\n".join(
+        f"### Top {idx}: {item.title}\n\n- candidate_id：{item.candidate_id}\n- 推荐理由：{item.reason}\n- 课题启发：优先检查它对 {item.module} 的操作化定义和实验材料。"
+        for idx, item in enumerate(items, 1)
+    ) or "本周暂无足够候选。"
+    return SummaryResult(top_rows, ai_generated=False)
 
 
 def write_report(body: str, directory: Path, filename: str) -> Path:
@@ -125,6 +152,16 @@ def daily_subject(item: LiteratureItem, report_date: date | None = None) -> str:
 def weekly_subject(report_date: date | None = None) -> str:
     today = report_date or date.today()
     return f"[ASD文献周总结] {today.isoformat()}｜本周Top 3文献"
+
+
+def _ai_generation_note(ai_generated: bool) -> str:
+    if not ai_generated:
+        return ""
+    return (
+        "## AI 生成提醒\n\n"
+        "本邮件中的部分解读内容由 MiMo 大模型根据题名、摘要和开放元数据生成，"
+        "可能存在遗漏或理解偏差。正式阅读、引用或导入 Zotero 前，请以原文和 DOI 页面为准。"
+    )
 
 
 def _clean_text(text: str) -> str:

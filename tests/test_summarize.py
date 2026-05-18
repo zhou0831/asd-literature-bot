@@ -1,5 +1,5 @@
 from src.models import LiteratureItem
-from src.summarize import render_daily_report, summarize_article_in_chinese
+from src.summarize import render_daily_report, render_weekly_report, summarize_article_in_chinese
 
 
 def test_daily_report_uses_chinese_overview_not_raw_english_abstract(monkeypatch):
@@ -18,6 +18,36 @@ def test_daily_report_uses_chinese_overview_not_raw_english_abstract(monkeypatch
     )
     overview = summarize_article_in_chinese(item)
     report = render_daily_report(item)
-    assert "这篇文章主要讨论" in overview
-    assert "共同注意" in overview
+    assert "这篇文章主要讨论" in overview.text
+    assert "共同注意" in overview.text
+    assert overview.ai_generated is False
     assert "Purpose This study examined" not in report
+    assert "AI 生成提醒" not in report
+
+
+def test_daily_report_marks_ai_generated_overview(monkeypatch):
+    monkeypatch.setattr("src.summarize.generate_article_overview_with_mimo", lambda item: "这是 MiMo 生成的中文概述。")
+    item = LiteratureItem(
+        title="Joint attention and autism",
+        abstract="Purpose This study examined joint attention in children with autism.",
+        candidate_id="2026-05-18_test",
+        score=12,
+        reason="joint attention；autism",
+        module="A",
+    )
+    overview = summarize_article_in_chinese(item)
+    report = render_daily_report(item)
+    assert overview.ai_generated is True
+    assert "这是 MiMo 生成的中文概述。" in report
+    assert "AI 生成提醒" in report
+
+
+def test_weekly_report_uses_score_order_and_marks_ai_content(monkeypatch):
+    monkeypatch.setattr("src.summarize.generate_weekly_report_with_mimo", lambda items: "### Top 1\n\nAI 周报解读。")
+    low = LiteratureItem(title="Low score", candidate_id="low", score=1, module="A")
+    high = LiteratureItem(title="High score", candidate_id="high", score=10, module="C")
+    report = render_weekly_report([low, high])
+    assert "- 1. High score" in report
+    assert "- 2. Low score" in report
+    assert "AI 周报解读。" in report
+    assert "AI 生成提醒" in report
