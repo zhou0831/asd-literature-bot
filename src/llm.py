@@ -6,7 +6,7 @@ from .config import env, load_dotenv
 from .models import LiteratureItem
 
 
-DEFAULT_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
+DEFAULT_MIMO_BASE_URL = "https://api.mimo-v2.com/v1"
 DEFAULT_MIMO_MODEL = "mimo-v2.5-pro"
 
 
@@ -47,7 +47,7 @@ def generate_article_overview_with_mimo(item: LiteratureItem) -> str | None:
         ],
         temperature=0.2,
         top_p=0.9,
-        max_completion_tokens=900,
+        max_tokens=900,
         stream=False,
     )
     text = _message_text(completion)
