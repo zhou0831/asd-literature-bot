@@ -195,4 +195,4 @@ def _strip_visible_reasoning(text: str) -> str:
             break
     banned_prefixes = ("用户", "作为 AI", "作为AI", "我应该", "我会", "让我", "首先", "所以，我", "再看")
     lines = [line for line in text.splitlines() if not line.strip().startswith(banned_prefixes)]
-    return "\n".join(lines).strip()
+    return "\n".join(lines).replace("**", "").strip()
