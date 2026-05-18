@@ -1,0 +1,34 @@
+name: Approve Zotero Import
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_id:
+        description: "candidate_id from the daily email, for example 2026-05-18_xxxxx"
+        required: true
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/recommended.sqlite
+            data/recommended.sqlite-shm
+            data/recommended.sqlite-wal
+            reports
+          key: literature-data-import-${{ github.run_id }}
+          restore-keys: |
+            literature-data-
+      - run: pip install -r requirements.txt
+      - run: python scripts/approve_import.py --candidate-id "${{ inputs.candidate_id }}" --add-to-zotero
+        env:
+          ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+          ZOTERO_USER_ID: ${{ secrets.ZOTERO_USER_ID }}
+          ZOTERO_LIBRARY_TYPE: ${{ secrets.ZOTERO_LIBRARY_TYPE }}
+          ZOTERO_COLLECTION_KEY: ${{ secrets.ZOTERO_COLLECTION_KEY }}

@@ -1,0 +1,29 @@
+﻿project:
+  name: asd-literature-bot
+  timezone: Asia/Shanghai
+
+research_profile:
+  topic: ASD children dynamic social intention processing
+  collection_name: "社会意图脉络——社会认知"
+  zotero_collection_key: Z7SCP3DE
+  import_tag: "GPT推荐"
+  modules:
+    A: "线索 / 代理检测"
+    B: "目标导向动作理解"
+    C: "隐含意图 / 心智化"
+    methodology: "EEG、眼动、动态社会互动视频、低水平视觉控制"
+    review: "综述 / 理论模型"
+
+search:
+  days_back: 21
+  max_results_per_source: 20
+  queries:
+    - '(autism OR autistic OR ASD) AND ("social cognition" OR "social intention" OR mentalizing OR "theory of mind")'
+    - '(autism OR autistic OR ASD) AND ("biological motion" OR "action prediction" OR "goal directed action")'
+    - '(autism OR autistic OR ASD) AND ("joint attention" OR "gaze cueing" OR "social attribution")'
+
+paths:
+  database: data/recommended.sqlite
+  daily_reports: reports/daily
+  weekly_reports: reports/weekly
+

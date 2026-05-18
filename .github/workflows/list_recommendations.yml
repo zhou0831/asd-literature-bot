@@ -1,0 +1,39 @@
+name: List Recommended Literature
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "How many recent recommendations to export"
+        required: false
+        default: "50"
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/recommended.sqlite
+            data/recommended.sqlite-shm
+            data/recommended.sqlite-wal
+            reports
+          key: literature-data-list-${{ github.run_id }}
+          restore-keys: |
+            literature-data-
+      - run: pip install -r requirements.txt
+      - run: |
+          python scripts/list_recommendations.py --limit "${{ inputs.limit }}" --format md --output reports/recommendations.md
+          python scripts/list_recommendations.py --limit "${{ inputs.limit }}" --format csv --output reports/recommendations.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommended-literature-history
+          path: |
+            reports/recommendations.md
+            reports/recommendations.csv
+          if-no-files-found: error

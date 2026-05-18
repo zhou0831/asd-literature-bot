@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+data/*.sqlite
+data/*.sqlite-*
+data/zotero_items.json
+reports/daily/*.md
+reports/weekly/*.md
+reports/recommendations.*
+!reports/daily/.gitkeep
+!reports/weekly/.gitkeep

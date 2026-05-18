@@ -1,0 +1,45 @@
+name: Weekly Literature Summary
+
+on:
+  schedule:
+    - cron: "37 0 * * 1"
+  workflow_dispatch:
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/recommended.sqlite
+            data/recommended.sqlite-shm
+            data/recommended.sqlite-wal
+            reports
+          key: literature-data-${{ github.run_id }}
+          restore-keys: |
+            literature-data-
+      - run: pip install -r requirements.txt
+      - run: python scripts/run_weekly.py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+          ZOTERO_USER_ID: ${{ secrets.ZOTERO_USER_ID }}
+          ZOTERO_LIBRARY_TYPE: ${{ secrets.ZOTERO_LIBRARY_TYPE }}
+          ZOTERO_COLLECTION_KEY: ${{ secrets.ZOTERO_COLLECTION_KEY }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: 587
+          TIMEZONE: Asia/Shanghai
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weekly-reports
+          path: reports/weekly/*.md
+          if-no-files-found: ignore
