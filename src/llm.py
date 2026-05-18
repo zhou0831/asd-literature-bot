@@ -19,6 +19,7 @@ def generate_article_overview_with_mimo(item: LiteratureItem) -> str | None:
     load_dotenv()
     api_key = env("MIMO_API_KEY")
     if not api_key:
+        print("Mimo overview skipped: MIMO_API_KEY is not configured.")
         return None
 
     from openai import OpenAI
@@ -50,7 +51,11 @@ def generate_article_overview_with_mimo(item: LiteratureItem) -> str | None:
         stream=False,
     )
     text = _message_text(completion)
-    return text.strip() if text and text.strip() else None
+    if text and text.strip():
+        print("Mimo overview generated.")
+        return text.strip()
+    print("Mimo overview returned empty content.")
+    return None
 
 
 def _article_prompt(item: LiteratureItem) -> str:
@@ -88,4 +93,3 @@ def _message_text(completion: Any) -> str:
     if isinstance(message, dict):
         return message.get("content") or message.get("reasoning_content") or ""
     return ""
-
