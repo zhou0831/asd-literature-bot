@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+import re
 
 from .models import LiteratureItem
 
@@ -9,7 +10,7 @@ from .models import LiteratureItem
 def render_daily_report(item: LiteratureItem, report_date: date | None = None) -> str:
     today = report_date or date.today()
     authors = ", ".join(item.authors[:8]) if item.authors else "作者信息待补充"
-    abstract = item.abstract.strip() or "摘要暂未从检索源获取，建议打开原文页面后人工复核。"
+    chinese_overview = summarize_article_in_chinese(item)
     import_command = f"python scripts/approve_import.py --candidate-id {item.candidate_id} --add-to-zotero"
     return f"""# ASD 文献每日推荐 - {today.isoformat()}
 
@@ -29,7 +30,7 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 
 ## 文章讲了什么
 
-{abstract}
+{chinese_overview}
 
 ## 我能从中学到什么
 
@@ -51,6 +52,21 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 {import_command}
 ```
 """
+
+
+def summarize_article_in_chinese(item: LiteratureItem) -> str:
+    text = _clean_text(f"{item.title}. {item.abstract}")
+    if not item.abstract.strip():
+        return (
+            f"这篇文献题名显示，它主要关注“{item.title}”。检索源没有返回可用摘要，"
+            "所以目前只能把它作为候选文献处理；建议打开 DOI/URL 后复核研究对象、任务材料、主要指标和结论。"
+        )
+
+    topic = _topic_sentence(text)
+    design = _design_sentence(text)
+    result = _result_sentence(text)
+    relevance = _relevance_sentence(item, text)
+    return "\n\n".join([topic, design, result, relevance])
 
 
 def render_weekly_report(items: list[LiteratureItem], report_date: date | None = None) -> str:
@@ -100,6 +116,73 @@ def daily_subject(item: LiteratureItem, report_date: date | None = None) -> str:
 def weekly_subject(report_date: date | None = None) -> str:
     today = report_date or date.today()
     return f"[ASD文献周总结] {today.isoformat()}｜本周Top 3文献"
+
+
+def _clean_text(text: str) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    return text
+
+
+def _topic_sentence(text: str) -> str:
+    lowered = text.lower()
+    parts = ["这篇文章主要讨论 ASD/自闭症相关问题"]
+    if "joint attention" in lowered:
+        parts.append("共同注意")
+    if "gaze" in lowered or "eye tracking" in lowered or "eye-tracking" in lowered:
+        parts.append("凝视线索或眼动/视觉注意")
+    if "theory of mind" in lowered or "mentalizing" in lowered:
+        parts.append("心理理论或心智化")
+    if "social cognition" in lowered or "social intention" in lowered:
+        parts.append("社会认知或社会意图加工")
+    if "action" in lowered or "goal" in lowered or "prediction" in lowered:
+        parts.append("动作理解、目标推断或预测")
+    if len(parts) == 1:
+        parts.append("社会沟通、认知或方法学评估")
+    return "；".join(parts) + "。"
+
+
+def _design_sentence(text: str) -> str:
+    lowered = text.lower()
+    details: list[str] = []
+    sample = re.search(r"\bn\s*=\s*(\d+)", lowered)
+    if sample:
+        details.append(f"摘要中提到样本量约为 n={sample.group(1)}")
+    age = re.search(r"(\d+)\s*(?:-|to|–)\s*(\d+)\s*years?", lowered)
+    if age:
+        details.append(f"被试年龄范围约为 {age.group(1)}-{age.group(2)} 岁")
+    if "children" in lowered or "child" in lowered:
+        details.append("研究对象包含儿童或儿童发展样本")
+    if "eeg" in lowered or "erp" in lowered:
+        details.append("方法上涉及 EEG/ERP 指标")
+    if "eye tracking" in lowered or "eye-tracking" in lowered:
+        details.append("方法上涉及眼动或视觉注意测量")
+    if "review" in lowered or "scoping review" in lowered or "meta-analysis" in lowered:
+        details.append("文章类型偏综述或范围综述")
+    if not details:
+        details.append("摘要提示它围绕研究问题、方法和结果进行了常规实证或综述性分析")
+    return "从研究设计看，" + "；".join(details) + "。"
+
+
+def _result_sentence(text: str) -> str:
+    lowered = text.lower()
+    if "conclusion" in lowered or "results" in lowered or "findings" in lowered:
+        return (
+            "从结果/结论看，作者试图说明相关社会认知或方法学指标如何区分 ASD 与典型发展样本，"
+            "或如何解释 ASD 个体在社会线索加工、动作理解、注意分配上的差异。"
+        )
+    return "从摘要可见，这篇文章更适合作为初筛候选；具体效应大小、统计证据和结论强度仍需看全文确认。"
+
+
+def _relevance_sentence(item: LiteratureItem, text: str) -> str:
+    module_map = {
+        "A": "模块 A：线索 / 代理检测",
+        "B": "模块 B：目标导向动作理解",
+        "C": "模块 C：隐含意图 / 心智化",
+        "方法学": "方法学：EEG、眼动、动态刺激或低水平视觉控制",
+        "综述": "综述：理论框架和研究脉络整理",
+    }
+    module = module_map.get(item.module, item.module)
+    return f"对你的课题来说，它最值得先放在“{module}”下复核，重点看任务材料是否足够动态、社会性是否明确，以及是否控制了低水平视觉因素。"
 
 
 def _next_focus(items: list[LiteratureItem]) -> str:
