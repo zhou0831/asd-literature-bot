@@ -1,5 +1,6 @@
 from src.models import LiteratureItem
 from src.summarize import render_daily_report, render_weekly_report, summarize_article_in_chinese
+from src.llm import _strip_visible_reasoning
 
 
 def test_daily_report_uses_chinese_overview_not_raw_english_abstract(monkeypatch):
@@ -51,3 +52,8 @@ def test_weekly_report_uses_score_order_and_marks_ai_content(monkeypatch):
     assert "- 2. Low score" in report
     assert "AI 周报解读。" in report
     assert "AI 生成提醒" in report
+
+
+def test_strip_visible_reasoning_keeps_final_weekly_text():
+    raw = "用户期望我解释 Top 3。\n我应该先分析。\n### Top 1\n\n正式解读。"
+    assert _strip_visible_reasoning(raw) == "### Top 1\n\n正式解读。"

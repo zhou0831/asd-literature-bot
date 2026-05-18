@@ -99,13 +99,14 @@ def render_weekly_report(items: list[LiteratureItem], report_date: date | None =
     ) or "- 本周暂无推荐记录。"
     weekly_insight = summarize_weekly_in_chinese(top)
     focus = _next_focus(top)
+    top_heading = f"本周最值得读的 {len(top)} 篇" if top else "本周最值得读的文献"
     return f"""# ASD 文献周总结 - {today.isoformat()}
 
 ## 本周推荐过的全部文献列表
 
 {all_rows}
 
-## 本周最值得读的 3 篇
+## {top_heading}
 
 {weekly_insight.text}
 

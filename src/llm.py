@@ -13,6 +13,7 @@ HUMANIZED_STYLE_GUIDE = (
     "不要用宣传腔，不要写“至关重要、显著体现、关键作用、不断演变的格局、值得注意的是、此外”。"
     "避免机械三段式和“不仅……而且……”结构。句子长短可以变化，但不要故作文学化。"
     "承认不确定性时要具体，比如“摘要没有说明样本细节，需要看全文确认”。"
+    "只输出最终文本，不要输出思考过程、分析过程、自我说明或“作为 AI”之类的话。"
 )
 
 
@@ -150,12 +151,14 @@ DOI：{item.doi or "无"}
 URL：{item.url or "无"}
 摘要：{item.abstract or "检索源没有返回摘要。"}"""
         )
-    return f"""下面是本周已按本地评分排序后的 Top 3 候选文献。请严格保持这个顺序，不要重新排名。
+    count = len(items[:3])
+    return f"""下面是本周已按本地评分排序后的 Top {count} 候选文献。请严格保持这个顺序，不要重新排名。
 
-请输出中文 Markdown，只写“本周最值得读的 3 篇”这个部分：
-- 严格按 Top 1、Top 2、Top 3 的顺序逐篇写。
+请输出中文 Markdown，只写“本周最值得读的 {count} 篇”这个部分：
+- 严格按已给出的 Top 顺序逐篇写。只写输入里出现的文献，不要补不存在的 Top。
 - 每篇包含 candidate_id、为什么值得读、对我的课题有什么启发。
 - 每篇 2-4 句话，语言简洁。
+- 不要写“用户要求”“我应该”“作为 AI”“下面我将”等思考过程或自我说明。
 
 不要编造全文信息；如果摘要不足，请明确说需要看全文复核。
 
@@ -168,10 +171,25 @@ def _message_text(completion: Any) -> str:
     message = choice.message
     content = getattr(message, "content", None)
     if content:
-        return content
+        return _strip_visible_reasoning(content)
     reasoning_content = getattr(message, "reasoning_content", None)
     if reasoning_content:
-        return reasoning_content
+        return _strip_visible_reasoning(reasoning_content)
     if isinstance(message, dict):
-        return message.get("content") or message.get("reasoning_content") or ""
+        return _strip_visible_reasoning(message.get("content") or message.get("reasoning_content") or "")
     return ""
+
+
+def _strip_visible_reasoning(text: str) -> str:
+    text = (text or "").strip()
+    if not text:
+        return ""
+    markers = ["### Top 1", "Top 1", "## Top 1"]
+    for marker in markers:
+        idx = text.find(marker)
+        if idx > 0:
+            text = text[idx:].strip()
+            break
+    banned_prefixes = ("用户", "作为 AI", "作为AI", "我应该", "我会", "让我", "首先", "所以，我", "再看")
+    lines = [line for line in text.splitlines() if not line.strip().startswith(banned_prefixes)]
+    return "\n".join(lines).strip()
