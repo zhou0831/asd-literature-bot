@@ -6,7 +6,7 @@ from .config import env, load_dotenv
 from .models import LiteratureItem
 
 
-DEFAULT_MIMO_BASE_URL = "https://api.mimo-v2.com/v1"
+DEFAULT_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
 DEFAULT_MIMO_MODEL = "mimo-v2.5-pro"
 
 

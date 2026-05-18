@@ -34,7 +34,7 @@ copy .env.example .env
 
 ```bash
 MIMO_API_KEY=
-MIMO_BASE_URL=https://api.mimo-v2.com/v1
+MIMO_BASE_URL=https://api.xiaomimimo.com/v1
 MIMO_MODEL=mimo-v2.5-pro
 ZOTERO_API_KEY=
 ZOTERO_USER_ID=
@@ -59,7 +59,7 @@ Gmail SMTP 发送需要 Google 账号开启两步验证，然后生成 16 位 ap
 本项目使用 OpenAI-compatible Chat Completions 调用 MiMo。默认配置：
 
 ```bash
-MIMO_BASE_URL=https://api.mimo-v2.com/v1
+MIMO_BASE_URL=https://api.xiaomimimo.com/v1
 MIMO_MODEL=mimo-v2.5-pro
 ```
 
@@ -86,7 +86,7 @@ MIMO_MODEL=mimo-v2.5-pro
 
 可选变量，不是 Secrets：
 
-- `MIMO_BASE_URL`，默认 `https://api.mimo-v2.com/v1`
+- `MIMO_BASE_URL`，默认 `https://api.xiaomimimo.com/v1`
 - `MIMO_MODEL`，默认 `mimo-v2.5-pro`
 
 ## 本地测试 Gmail
