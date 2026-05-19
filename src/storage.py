@@ -80,6 +80,13 @@ class Store:
             return None
         return LiteratureItem.from_dict(json.loads(row[0]))
 
+    def has_recommendation_for_date(self, day: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM recommendations WHERE candidate_id LIKE ? LIMIT 1",
+            (f"{day}_%",),
+        ).fetchone()
+        return row is not None
+
     def save_recommendation(self, item: LiteratureItem) -> None:
         payload = json.dumps(item.to_dict(), ensure_ascii=False)
         self.conn.execute(
@@ -113,4 +120,3 @@ class Store:
             (limit,),
         ).fetchall()
         return [LiteratureItem.from_dict(json.loads(row[0])) for row in rows]
-

@@ -22,6 +22,11 @@ def main() -> int:
     config = load_config()
     store = Store(path_from_config(config, "database"))
     try:
+        today = date.today().isoformat()
+        if store.has_recommendation_for_date(today):
+            print(f"Daily recommendation already exists for {today}; skipping duplicate send.")
+            return 0
+
         zotero = ZoteroClient()
         zotero_items = zotero.existing_items() if zotero.configured else []
         candidates = search_all(config)
@@ -32,12 +37,12 @@ def main() -> int:
             return 2
 
         item = ranked[0]
-        item.candidate_id = f"{date.today().isoformat()}_{short_hash(item.doi or item.title)}"
+        item.candidate_id = f"{today}_{short_hash(item.doi or item.title)}"
         store.save_candidate(item)
         store.save_recommendation(item)
 
         body = render_daily_report(item)
-        filename = f"{date.today().isoformat()}.md"
+        filename = f"{today}.md"
         path = write_report(body, path_from_config(config, "daily_reports"), filename)
         print(f"Daily report written: {path}")
 
@@ -53,4 +58,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
