@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from datetime import date
 from pathlib import Path
 
@@ -42,7 +43,8 @@ def main() -> int:
     store = Store(path_from_config(config, "database"))
     try:
         today = date.today().isoformat()
-        if store.has_recommendation_for_date(today):
+        force_daily_send = os.getenv("FORCE_DAILY_SEND", "").strip().lower() in {"1", "true", "yes"}
+        if store.has_recommendation_for_date(today) and not force_daily_send:
             print(f"Daily recommendation already exists for {today}; skipping duplicate send.")
             return 0
 
