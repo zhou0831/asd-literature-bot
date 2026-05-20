@@ -19,7 +19,12 @@ class SummaryResult:
     ai_failed: bool = False
 
 
-def render_daily_report(item: LiteratureItem, report_date: date | None = None, low_confidence: bool = False) -> str:
+def render_daily_report(
+    item: LiteratureItem,
+    report_date: date | None = None,
+    low_confidence: bool = False,
+    alternatives: list[LiteratureItem] | None = None,
+) -> str:
     today = report_date or date.today()
     authors = ", ".join(item.authors[:8]) if item.authors else "作者信息待补充"
     overview = summarize_article_in_chinese(item)
@@ -28,8 +33,14 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None, l
     relevance = overview.relevance or _relevance_sentence(item, f"{item.title}. {item.abstract}")
     limitations = overview.limitations or _limitations_text(item)
     import_command = f"python scripts/approve_import.py --candidate-id {item.candidate_id} --add-to-zotero"
-    zotero_block = _zotero_block(import_command, low_confidence or item.low_confidence or item.strong_exclusion)
+    tier = item.recommendation_tier or ("core" if not low_confidence else "exploratory")
+    zotero_block = _zotero_block(import_command, tier)
+    alternatives_block = _alternatives_block(alternatives or [], item)
     return f"""# ASD 文献每日推荐 - {today.isoformat()}
+
+## 今日推荐类型
+
+{_tier_label(tier)}
 
 ## 今日推荐文献基本信息
 
@@ -41,9 +52,18 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None, l
 - URL：{item.url or "待补充"}
 - candidate_id：{item.candidate_id}
 
-## 为什么推荐这篇
+## 为什么今天推荐它
 
-这篇文献的 topic_fit_score 为 {item.topic_fit_score}，recommendation_score 为 {item.recommendation_score}。主要命中：{item.reason}。
+{_tier_reason(tier)}
+
+## 分数
+
+- topic_fit_score：{item.topic_fit_score}
+- recommendation_score：{item.recommendation_score}
+- recommendation_tier：{tier}
+- module：{item.module}
+- penalty_reasons：{', '.join(item.penalty_reasons) or '无'}
+- strong_exclusion：{item.strong_exclusion}
 
 ## 文章讲了什么
 
@@ -65,24 +85,9 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None, l
 
 {zotero_block}
 
+{alternatives_block}
+
 {ai_note}
-"""
-
-
-def render_no_high_match_report(candidates: list[LiteratureItem], report_date: date | None = None) -> str:
-    today = report_date or date.today()
-    rows = "\n\n".join(_low_match_candidate_text(item, idx) for idx, item in enumerate(candidates[:3], 1))
-    return f"""# ASD 文献每日推荐 - {today.isoformat()}
-
-## 今日结果
-
-今天没有找到达到核心精读标准的高匹配文献，因此不生成正式推荐，也不建议导入 Zotero。
-
-最低标准：topic_fit_score >= 50，recommendation_score >= 55，且没有 strong_exclusion。
-
-## 低匹配备选
-
-{rows or "今天没有可列出的候选文献。"}
 """
 
 
@@ -123,14 +128,15 @@ def summarize_article_in_chinese(item: LiteratureItem) -> SummaryResult:
 
 def render_weekly_report(items: list[LiteratureItem], report_date: date | None = None) -> str:
     today = report_date or date.today()
-    ranked = sorted(items, key=lambda row: row.score, reverse=True)
+    ranked = sorted(items, key=lambda row: row.recommendation_score, reverse=True)
     top = ranked[:3]
     all_rows = "\n".join(
-        f"- {idx}. {item.title} ({item.year or '年份待补充'}) - {item.module} - score {item.score}"
+        f"- {idx}. {item.title} ({item.year or '年份待补充'}) - {_tier_label(item.recommendation_tier)} - {item.module} - score {item.recommendation_score}"
         for idx, item in enumerate(ranked, 1)
     ) or "- 本周暂无推荐记录。"
     weekly_insight = summarize_weekly_in_chinese(top)
     focus = _next_focus(top)
+    discard = _weekly_discard_text(ranked, top)
     top_heading = f"本周最值得读的 {len(top)} 篇" if top else "本周最值得读的文献"
     return f"""# ASD 文献周总结 - {today.isoformat()}
 
@@ -145,6 +151,10 @@ def render_weekly_report(items: list[LiteratureItem], report_date: date | None =
 ## 对课题的启发
 
 本周推荐应优先服务于“动态社会意图加工”的材料、任务和指标设计。阅读时建议记录每篇文章的刺激类型、被试年龄、ASD 诊断信息、主要行为/EEG/眼动指标，以及作者如何控制低水平视觉因素。
+
+## 可以略读或放弃的每日推荐
+
+{discard}
 
 ## 下周建议重点关注
 
@@ -164,7 +174,7 @@ def summarize_weekly_in_chinese(items: list[LiteratureItem]) -> SummaryResult:
         return SummaryResult(mimo_summary, ai_generated=True)
 
     top_rows = "\n\n".join(
-        f"### Top {idx}: {item.title}\n\n- candidate_id：{item.candidate_id}\n- 推荐理由：{item.reason}\n- 课题启发：优先检查它对 {item.module} 的操作化定义和实验材料。"
+        f"### Top {idx}: {item.title}\n\n- candidate_id：{item.candidate_id}\n- 推荐类型：{_tier_label(item.recommendation_tier)}\n- 推荐理由：{item.reason}\n- 课题启发：优先检查它对 {item.module} 的操作化定义和实验材料。{_low_tier_weekly_note(item)}"
         for idx, item in enumerate(items, 1)
     ) or "本周暂无足够候选。"
     return SummaryResult(top_rows, ai_generated=False)
@@ -228,31 +238,70 @@ def _limitations_text(item: LiteratureItem) -> str:
     return "自动日报只能基于题名、摘要和开放元数据初筛；正式阅读前仍需核对样本、任务材料、统计设计和全文结论。"
 
 
-def _zotero_block(import_command: str, low_confidence: bool) -> str:
-    if low_confidence:
-        return "不建议导入 Zotero。若你人工复核后仍想保留，可再手动运行导入命令。"
+def _zotero_block(import_command: str, tier: str) -> str:
+    if tier != "core":
+        return "不建议直接导入 Zotero，除非人工复核后确认确实有用。若确认要保留，可手动运行导入命令。"
     return "建议先人工打开 URL/DOI 复核。若确认适合导入，请运行：\n\n```bash\n" + import_command + "\n```"
 
 
-def _low_match_candidate_text(item: LiteratureItem, idx: int) -> str:
-    if item.strong_exclusion or item.penalty_reasons:
-        judgment = (
-            "这篇文章只与眼动/视觉注意、ASD 诊断背景或非核心分类任务相关，不直接涉及动态社会意图加工、"
-            "A/B/C 模块、H_intent/H_belief、EEG/眼动对齐。因此不建议作为今日核心精读文献，也不建议导入 Zotero。"
+def _tier_label(tier: str) -> str:
+    return {
+        "core": "核心推荐",
+        "exploratory": "低置信推荐",
+        "background": "背景候选",
+        "very_low_confidence": "极低置信候选",
+    }.get(tier or "core", tier or "核心推荐")
+
+
+def _tier_reason(tier: str) -> str:
+    if tier == "core":
+        return "这篇文章达到当前课题核心精读标准，因此作为今日核心推荐。"
+    if tier == "exploratory":
+        return "今天没有检索到达到核心精读标准的文献，因此系统选择当天相关性最高且未被 strong_exclusion 排除的候选作为低置信推荐。它不一定适合直接导入 Zotero，但适合先快速浏览。"
+    if tier == "background":
+        return "这篇文章只与课题部分相关，主要作为背景补充。建议快速浏览，不建议直接导入 Zotero。"
+    return "今天所有候选都较弱，系统仍按每日推荐规则选择最高分候选。建议仅作检索记录，不建议精读或导入 Zotero。"
+
+
+def _alternatives_block(alternatives: list[LiteratureItem], selected: LiteratureItem) -> str:
+    if not alternatives:
+        return "## 其他备选候选\n\n今天没有更多备选候选。"
+    rows = []
+    for item in alternatives[:3]:
+        rows.append(
+            f"- 标题：{item.title}\n"
+            f"  - topic_fit_score：{item.topic_fit_score}\n"
+            f"  - recommendation_score：{item.recommendation_score}\n"
+            f"  - module：{item.module}\n"
+            f"  - penalty_reasons：{', '.join(item.penalty_reasons) or '无'}\n"
+            f"  - 为什么没有选为今日推荐：{_not_selected_reason(item, selected)}"
         )
-    else:
-        judgment = (
-            "这篇文章有一定相关性，但按当前评分还没有达到今日核心精读标准。建议先作为备选背景阅读，"
-            "暂不导入 Zotero；如果你人工复核后认为它直接服务于动态社会意图加工，再单独处理。"
-        )
-    return (
-        f"### 备选 {idx}: {item.title}\n\n"
-        f"- topic_fit_score：{item.topic_fit_score}\n"
-        f"- recommendation_score：{item.recommendation_score}\n"
-        f"- 模块：{item.module}\n"
-        f"- 降权原因：{', '.join(item.penalty_reasons) or '无'}\n"
-        f"- 判断：{judgment}"
-    )
+    return "## 其他备选候选\n\n" + "\n".join(rows)
+
+
+def _not_selected_reason(item: LiteratureItem, selected: LiteratureItem) -> str:
+    if item.strong_exclusion:
+        return "存在 strong_exclusion，优先级低于主推荐。"
+    if item.recommendation_score < selected.recommendation_score:
+        return "recommendation_score 低于今日主推荐。"
+    return "与今日主推荐相比，课题贴合度或可读价值略低。"
+
+
+def _low_tier_weekly_note(item: LiteratureItem) -> str:
+    if item.recommendation_tier in {"exploratory", "background", "very_low_confidence"}:
+        return " 这篇是低置信推荐，进入 Top 3 是因为本周候选池整体较弱，仍需人工复核。"
+    return ""
+
+
+def _weekly_discard_text(ranked: list[LiteratureItem], top: list[LiteratureItem]) -> str:
+    top_ids = {item.candidate_id for item in top}
+    rest = [item for item in ranked if item.candidate_id not in top_ids]
+    if not rest:
+        return "本周没有需要额外放弃的每日推荐。"
+    rows = []
+    for item in rest:
+        rows.append(f"- {item.title}：{_tier_label(item.recommendation_tier)}，不建议导入 Zotero，除非人工复核后确认与课题直接相关。")
+    return "\n".join(rows)
 
 
 def _clean_text(text: str) -> str:

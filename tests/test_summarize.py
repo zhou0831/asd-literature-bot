@@ -1,6 +1,5 @@
 from src.models import LiteratureItem
 from src.summarize import render_daily_report, render_weekly_report, summarize_article_in_chinese
-from src.llm import _strip_visible_reasoning
 
 
 def test_daily_report_uses_chinese_overview_not_raw_english_abstract(monkeypatch):
@@ -54,15 +53,18 @@ def test_daily_report_marks_ai_generated_overview(monkeypatch):
 
 def test_weekly_report_uses_score_order_and_marks_ai_content(monkeypatch):
     monkeypatch.setattr("src.summarize.generate_weekly_report_with_mimo", lambda items: "### Top 1\n\nAI 周报解读。")
-    low = LiteratureItem(title="Low score", candidate_id="low", score=1, module="A")
-    high = LiteratureItem(title="High score", candidate_id="high", score=10, module="C")
+    low = LiteratureItem(title="Low score", candidate_id="low", score=1, recommendation_score=1, module="A", recommendation_tier="background")
+    high = LiteratureItem(title="High score", candidate_id="high", score=10, recommendation_score=10, module="C", recommendation_tier="core")
     report = render_weekly_report([low, high])
     assert "- 1. High score" in report
-    assert "- 2. Low score" in report
+    assert "核心推荐" in report
+    assert "背景候选" in report
     assert "AI 周报解读。" in report
     assert "AI 生成提醒" in report
 
 
-def test_strip_visible_reasoning_keeps_final_weekly_text():
-    raw = "用户期望我解释 Top 3。\n我应该先分析。\n### Top 1\n\n正式解读。"
-    assert _strip_visible_reasoning(raw) == "### Top 1\n\n正式解读。"
+def test_weekly_report_shows_recommendation_tier():
+    item = LiteratureItem(title="Exploratory paper", candidate_id="x", recommendation_score=40, recommendation_tier="exploratory", module="A")
+    report = render_weekly_report([item])
+    assert "低置信推荐" in report
+    assert "这篇是低置信推荐" in report

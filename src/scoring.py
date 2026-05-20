@@ -148,6 +148,7 @@ def score_item(item: LiteratureItem) -> LiteratureItem:
     item.penalty_reasons = penalties
     item.strong_exclusion = strong_exclusion
     item.low_confidence = not is_recommendable(item)
+    item.recommendation_tier = recommendation_tier(item)
     item.reason = "；".join(matched[:10]) if matched else "主题词匹配较少，需要人工复核"
     if penalties:
         item.reason = f"{item.reason}；降权：{'，'.join(penalties)}"
@@ -160,6 +161,16 @@ def is_recommendable(item: LiteratureItem) -> bool:
         and item.recommendation_score >= MIN_RECOMMENDATION_SCORE
         and not item.strong_exclusion
     )
+
+
+def recommendation_tier(item: LiteratureItem) -> str:
+    if is_recommendable(item):
+        return "core"
+    if item.strong_exclusion:
+        return "background"
+    if item.topic_fit_score >= 35 or item.recommendation_score >= 45:
+        return "exploratory"
+    return "background"
 
 
 def choose_module(text: str) -> str:

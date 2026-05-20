@@ -183,21 +183,6 @@ def _message_text(completion: Any) -> str:
     return ""
 
 
-def _strip_visible_reasoning(text: str) -> str:
-    text = (text or "").strip()
-    if not text:
-        return ""
-    markers = ["### Top 1", "Top 1", "## Top 1"]
-    for marker in markers:
-        idx = text.find(marker)
-        if idx > 0:
-            text = text[idx:].strip()
-            break
-    banned_prefixes = ("用户", "作为 AI", "作为AI", "我应该", "我会", "让我", "首先", "所以，我", "再看")
-    lines = [line for line in text.splitlines() if not line.strip().startswith(banned_prefixes)]
-    return "\n".join(lines).replace("**", "").strip()
-
-
 def _create_chat_completion(client: Any, messages: list[dict[str, str]], max_tokens: int, json_mode: bool) -> Any:
     kwargs: dict[str, Any] = {
         "model": env("MIMO_MODEL", DEFAULT_MIMO_MODEL),

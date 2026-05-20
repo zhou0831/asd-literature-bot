@@ -25,6 +25,7 @@ class LiteratureItem:
     penalty_reasons: list[str] = field(default_factory=list)
     strong_exclusion: bool = False
     low_confidence: bool = False
+    recommendation_tier: str = "core"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +48,7 @@ class LiteratureItem:
             "penalty_reasons": self.penalty_reasons,
             "strong_exclusion": self.strong_exclusion,
             "low_confidence": self.low_confidence,
+            "recommendation_tier": self.recommendation_tier,
         }
 
     @classmethod
@@ -71,4 +73,5 @@ class LiteratureItem:
             penalty_reasons=list(data.get("penalty_reasons") or []),
             strong_exclusion=bool(data.get("strong_exclusion") or False),
             low_confidence=bool(data.get("low_confidence") or False),
+            recommendation_tier=data.get("recommendation_tier", "core"),
         )
