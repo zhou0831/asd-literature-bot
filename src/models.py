@@ -18,8 +18,13 @@ class LiteratureItem:
     pmcid: str = ""
     candidate_id: str = ""
     score: float = 0.0
+    topic_fit_score: float = 0.0
+    recommendation_score: float = 0.0
     reason: str = ""
     module: str = "方法学"
+    penalty_reasons: list[str] = field(default_factory=list)
+    strong_exclusion: bool = False
+    low_confidence: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -35,8 +40,13 @@ class LiteratureItem:
             "pmcid": self.pmcid,
             "candidate_id": self.candidate_id,
             "score": self.score,
+            "topic_fit_score": self.topic_fit_score,
+            "recommendation_score": self.recommendation_score,
             "reason": self.reason,
             "module": self.module,
+            "penalty_reasons": self.penalty_reasons,
+            "strong_exclusion": self.strong_exclusion,
+            "low_confidence": self.low_confidence,
         }
 
     @classmethod
@@ -54,7 +64,11 @@ class LiteratureItem:
             pmcid=data.get("pmcid", ""),
             candidate_id=data.get("candidate_id", ""),
             score=float(data.get("score") or 0),
+            topic_fit_score=float(data.get("topic_fit_score") or data.get("score") or 0),
+            recommendation_score=float(data.get("recommendation_score") or data.get("score") or 0),
             reason=data.get("reason", ""),
             module=data.get("module", "方法学"),
+            penalty_reasons=list(data.get("penalty_reasons") or []),
+            strong_exclusion=bool(data.get("strong_exclusion") or False),
+            low_confidence=bool(data.get("low_confidence") or False),
         )
-

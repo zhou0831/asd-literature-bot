@@ -1,0 +1,38 @@
+﻿topic: "ASD 儿童动态社会意图加工"
+core_goal: "围绕动态社会互动材料，分析 ASD 儿童从线索检测到动作目标理解，再到隐含意图/心理理论推断的时间过程。"
+
+modules:
+  A: "线索 / 代理检测：gaze cueing, joint attention, biological motion, agent detection"
+  B: "目标导向动作理解：goal-directed action, action prediction, intention from action"
+  C: "隐含意图 / 心智化：social attribution, theory of mind, mentalizing, false belief"
+  methodology: "EEG + 眼动同步、动态视频、自然istic social interaction、低水平视觉控制"
+
+thresholds:
+  min_topic_fit_score: 50
+  min_recommendation_score: 55
+
+positive_focus:
+  - dynamic social cognition
+  - social intention
+  - joint attention
+  - gaze cueing
+  - action prediction
+  - social attribution
+  - false belief
+  - theory of mind
+  - mentalizing
+  - moving shapes
+  - dynamic video
+  - EEG eye-tracking alignment
+
+negative_focus:
+  - generic ASD diagnosis
+  - AI diagnosis only
+  - facial recognition only
+  - static facial emotion recognition
+  - broad visual attention diagnosis
+  - machine learning classification only
+  - genetic or microbiome
+  - structural MRI classification
+  - intervention-only trial
+

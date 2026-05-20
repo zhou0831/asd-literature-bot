@@ -13,14 +13,22 @@ from .models import LiteratureItem
 class SummaryResult:
     text: str
     ai_generated: bool
+    learning_points: list[str] | None = None
+    relevance: str = ""
+    limitations: str = ""
+    ai_failed: bool = False
 
 
-def render_daily_report(item: LiteratureItem, report_date: date | None = None) -> str:
+def render_daily_report(item: LiteratureItem, report_date: date | None = None, low_confidence: bool = False) -> str:
     today = report_date or date.today()
     authors = ", ".join(item.authors[:8]) if item.authors else "作者信息待补充"
     overview = summarize_article_in_chinese(item)
-    ai_note = _ai_generation_note(overview.ai_generated)
+    ai_note = _ai_generation_note(overview.ai_generated, overview.ai_failed)
+    learning_points = _learning_points_text(item, overview)
+    relevance = overview.relevance or _relevance_sentence(item, f"{item.title}. {item.abstract}")
+    limitations = overview.limitations or _limitations_text(item)
     import_command = f"python scripts/approve_import.py --candidate-id {item.candidate_id} --add-to-zotero"
+    zotero_block = _zotero_block(import_command, low_confidence or item.low_confidence or item.strong_exclusion)
     return f"""# ASD 文献每日推荐 - {today.isoformat()}
 
 ## 今日推荐文献基本信息
@@ -35,7 +43,7 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 
 ## 为什么推荐这篇
 
-这篇文献与当前课题关键词的匹配度为 {item.score}，主要命中：{item.reason}。
+这篇文献的 topic_fit_score 为 {item.topic_fit_score}，recommendation_score 为 {item.recommendation_score}。主要命中：{item.reason}。
 
 ## 文章讲了什么
 
@@ -43,36 +51,59 @@ def render_daily_report(item: LiteratureItem, report_date: date | None = None) -
 
 ## 我能从中学到什么
 
-可以重点看它如何定义社会线索、动作目标或心智化变量，以及是否使用动态刺激、EEG、眼动或低水平视觉控制。这些信息能帮助你判断材料设计和实验解释是否足够贴近“动态社会意图加工”。
+{learning_points}
 
 ## 和我的课题哪一部分相关
 
-{item.module}
+{relevance}
 
 ## 这篇文章有什么局限
 
-自动日报只能基于题名、摘要和开放元数据初筛。是否真正适合纳入阅读清单，需要进一步查看全文的方法、样本年龄、ASD 诊断标准、刺激材料和统计设计。
+{limitations}
 
 ## 是否建议导入 Zotero
 
-建议先人工打开 URL/DOI 复核。若确认适合导入，请运行：
-
-```bash
-{import_command}
-```
+{zotero_block}
 
 {ai_note}
 """
 
 
+def render_no_high_match_report(candidates: list[LiteratureItem], report_date: date | None = None) -> str:
+    today = report_date or date.today()
+    rows = "\n\n".join(_low_match_candidate_text(item, idx) for idx, item in enumerate(candidates[:3], 1))
+    return f"""# ASD 文献每日推荐 - {today.isoformat()}
+
+## 今日结果
+
+今天没有找到达到核心精读标准的高匹配文献，因此不生成正式推荐，也不建议导入 Zotero。
+
+最低标准：topic_fit_score >= 50，recommendation_score >= 55，且没有 strong_exclusion。
+
+## 低匹配备选
+
+{rows or "今天没有可列出的候选文献。"}
+"""
+
+
 def summarize_article_in_chinese(item: LiteratureItem) -> SummaryResult:
+    ai_failed = False
     try:
-        mimo_overview = generate_article_overview_with_mimo(item)
+        mimo_summary = generate_article_overview_with_mimo(item)
     except Exception as exc:
         print(f"Warning: Mimo overview generation failed, using rule-based fallback: {exc}")
-        mimo_overview = None
-    if mimo_overview:
-        return SummaryResult(mimo_overview, ai_generated=True)
+        mimo_summary = None
+        ai_failed = True
+    if mimo_summary:
+        return SummaryResult(
+            mimo_summary["overview"],
+            ai_generated=True,
+            learning_points=mimo_summary.get("learning_points") or [],
+            relevance=mimo_summary.get("relevance") or "",
+            limitations=mimo_summary.get("limitations") or "",
+        )
+    if ai_failed:
+        print("Warning: AI summary validation failed; using rule-based fallback.")
 
     text = _clean_text(f"{item.title}. {item.abstract}")
     if not item.abstract.strip():
@@ -80,13 +111,14 @@ def summarize_article_in_chinese(item: LiteratureItem) -> SummaryResult:
             f"这篇文献题名显示，它主要关注“{item.title}”。检索源没有返回可用摘要，"
             "所以目前只能把它作为候选文献处理；建议打开 DOI/URL 后复核研究对象、任务材料、主要指标和结论。",
             ai_generated=False,
+            ai_failed=ai_failed,
         )
 
     topic = _topic_sentence(text)
     design = _design_sentence(text)
     result = _result_sentence(text)
     relevance = _relevance_sentence(item, text)
-    return SummaryResult("\n\n".join([topic, design, result, relevance]), ai_generated=False)
+    return SummaryResult("\n\n".join([topic, design, result, relevance]), ai_generated=False, ai_failed=ai_failed)
 
 
 def render_weekly_report(items: list[LiteratureItem], report_date: date | None = None) -> str:
@@ -155,13 +187,71 @@ def weekly_subject(report_date: date | None = None) -> str:
     return f"[ASD文献周总结] {today.isoformat()}｜本周Top 3文献"
 
 
-def _ai_generation_note(ai_generated: bool) -> str:
+def _ai_generation_note(ai_generated: bool, ai_failed: bool = False) -> str:
+    if ai_failed:
+        return "## AI 生成提醒\n\nAI 摘要校验失败，本段采用规则化摘要；邮件未包含模型原始输出。"
     if not ai_generated:
         return ""
     return (
         "## AI 生成提醒\n\n"
         "本邮件中的部分解读内容由 MiMo 大模型根据题名、摘要和开放元数据生成，"
         "可能存在遗漏或理解偏差。正式阅读、引用或导入 Zotero 前，请以原文和 DOI 页面为准。"
+    )
+
+
+def _learning_points_text(item: LiteratureItem, overview: SummaryResult) -> str:
+    if overview.learning_points:
+        return "\n".join(f"- {point}" for point in overview.learning_points[:4])
+    points: list[str] = []
+    if item.module == "A":
+        points.append("看它是否把 gaze cueing、joint attention 或代理线索拆成可操作的动态指标。")
+    elif item.module == "B":
+        points.append("看它如何定义动作目标、动作预测和意图线索，是否能映射到目标导向动作理解。")
+    elif item.module == "C":
+        points.append("看它是否涉及 social attribution、false belief、ToM 或 mentalizing，可否支持隐含意图加工假设。")
+    elif item.module == "方法学":
+        points.append("看它的方法是否能服务于动态视频、EEG/眼动同步或时间序列指标，而不只是静态分类。")
+    else:
+        points.append("看它是否提供可迁移的理论框架，而不是泛泛背景综述。")
+    if item.penalty_reasons:
+        points.append("注意降权原因：" + "，".join(item.penalty_reasons) + "；这些点决定它是否只适合作背景阅读。")
+    points.append(f"复核 topic_fit_score={item.topic_fit_score} 是否符合你当前课题的核心问题。")
+    return "\n".join(f"- {point}" for point in points)
+
+
+def _limitations_text(item: LiteratureItem) -> str:
+    if item.strong_exclusion or item.low_confidence:
+        return (
+            "这篇文章只与眼动/视觉注意或 ASD 诊断背景相关，不直接涉及动态社会意图加工、"
+            "A/B/C 模块、H_intent/H_belief、EEG/眼动对齐。因此不建议作为今日核心精读文献。"
+        )
+    return "自动日报只能基于题名、摘要和开放元数据初筛；正式阅读前仍需核对样本、任务材料、统计设计和全文结论。"
+
+
+def _zotero_block(import_command: str, low_confidence: bool) -> str:
+    if low_confidence:
+        return "不建议导入 Zotero。若你人工复核后仍想保留，可再手动运行导入命令。"
+    return "建议先人工打开 URL/DOI 复核。若确认适合导入，请运行：\n\n```bash\n" + import_command + "\n```"
+
+
+def _low_match_candidate_text(item: LiteratureItem, idx: int) -> str:
+    if item.strong_exclusion or item.penalty_reasons:
+        judgment = (
+            "这篇文章只与眼动/视觉注意、ASD 诊断背景或非核心分类任务相关，不直接涉及动态社会意图加工、"
+            "A/B/C 模块、H_intent/H_belief、EEG/眼动对齐。因此不建议作为今日核心精读文献，也不建议导入 Zotero。"
+        )
+    else:
+        judgment = (
+            "这篇文章有一定相关性，但按当前评分还没有达到今日核心精读标准。建议先作为备选背景阅读，"
+            "暂不导入 Zotero；如果你人工复核后认为它直接服务于动态社会意图加工，再单独处理。"
+        )
+    return (
+        f"### 备选 {idx}: {item.title}\n\n"
+        f"- topic_fit_score：{item.topic_fit_score}\n"
+        f"- recommendation_score：{item.recommendation_score}\n"
+        f"- 模块：{item.module}\n"
+        f"- 降权原因：{', '.join(item.penalty_reasons) or '无'}\n"
+        f"- 判断：{judgment}"
     )
 
 

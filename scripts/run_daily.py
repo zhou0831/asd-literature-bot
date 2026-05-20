@@ -10,10 +10,10 @@ sys.path.insert(0, str(ROOT))
 from src.config import load_config, path_from_config
 from src.dedupe import filter_duplicates
 from src.email_sender import can_send_email, send_email
-from src.scoring import score_items
+from src.scoring import is_recommendable, score_items
 from src.search import search_all
 from src.storage import Store
-from src.summarize import daily_subject, render_daily_report, write_report
+from src.summarize import daily_subject, render_daily_report, render_no_high_match_report, write_report
 from src.text_utils import short_hash
 from src.zotero_client import ZoteroClient
 
@@ -36,7 +36,19 @@ def main() -> int:
             print("No new literature candidates found after dedupe.")
             return 2
 
-        item = ranked[0]
+        item = next((candidate for candidate in ranked if is_recommendable(candidate)), None)
+        if item is None:
+            body = render_no_high_match_report(ranked[:3])
+            filename = f"{today}.md"
+            path = write_report(body, path_from_config(config, "daily_reports"), filename)
+            print(f"No high-match literature found. Low-match report written: {path}")
+            if can_send_email():
+                send_email(f"[ASD文献推荐] {today}｜今日未找到高匹配文献", body)
+                print("Low-match daily email sent.")
+            else:
+                print("Email not sent: MAIL_FROM and GMAIL_APP_PASSWORD are not fully configured.")
+            return 0
+
         item.candidate_id = f"{today}_{short_hash(item.doi or item.title)}"
         store.save_candidate(item)
         store.save_recommendation(item)

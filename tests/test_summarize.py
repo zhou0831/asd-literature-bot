@@ -27,7 +27,15 @@ def test_daily_report_uses_chinese_overview_not_raw_english_abstract(monkeypatch
 
 
 def test_daily_report_marks_ai_generated_overview(monkeypatch):
-    monkeypatch.setattr("src.summarize.generate_article_overview_with_mimo", lambda item: "这是 MiMo 生成的中文概述。")
+    monkeypatch.setattr(
+        "src.summarize.generate_article_overview_with_mimo",
+        lambda item: {
+            "overview": "这是 MiMo 生成的中文概述。",
+            "learning_points": ["学习点一"],
+            "relevance": "与模块 A 相关。",
+            "limitations": "仍需看全文。",
+        },
+    )
     item = LiteratureItem(
         title="Joint attention and autism",
         abstract="Purpose This study examined joint attention in children with autism.",
@@ -40,6 +48,7 @@ def test_daily_report_marks_ai_generated_overview(monkeypatch):
     report = render_daily_report(item)
     assert overview.ai_generated is True
     assert "这是 MiMo 生成的中文概述。" in report
+    assert "学习点一" in report
     assert "AI 生成提醒" in report
 
 
