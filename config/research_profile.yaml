@@ -1,12 +1,75 @@
-﻿topic: "ASD 儿童动态社会意图加工"
+topic: "ASD 儿童动态社会意图加工"
 core_goal: "围绕动态社会互动材料，分析 ASD 儿童从线索检测到动作目标理解，再到隐含意图/心理理论推断的时间过程。"
 
 modules:
-  A: "线索 / 代理检测：gaze cueing, joint attention, biological motion, agent detection"
-  B: "目标导向动作理解：goal-directed action, action prediction, intention from action"
-  C1: "社会归因 / 隐含互动意图：social attribution, moving shapes, Frith-Happe, Heider-Simmel, SAT-MC, mSAT"
-  C2: "错误信念 / 知识差异：false belief, belief reasoning, knowledge difference, CAToon, choose-the-ending, belief-consistent looking"
-  methodology: "EEG + 眼动同步、动态视频、自然istic social interaction、低水平视觉控制"
+  A:
+    label: "线索 / 代理检测"
+    keywords:
+      - joint attention
+      - gaze cueing
+      - gaze following
+      - pointing
+      - gesture cueing
+      - biological motion
+      - agency
+      - animacy
+      - chasing
+  B:
+    label: "目标导向动作理解"
+    keywords:
+      - action prediction
+      - goal-directed action
+      - anticipatory gaze
+      - hand-object
+      - reach prediction
+      - contextual priors
+      - ambiguous kinematics
+  C1:
+    label: "隐含互动意图 / social attribution"
+    keywords:
+      - social attribution
+      - moving shapes
+      - animated triangles
+      - Heider-Simmel
+      - Frith-Happe
+      - SAT
+      - SAT-MC
+      - mSAT
+      - modified social attribution
+      - helping
+      - chasing
+      - teasing
+      - tricking
+      - cooperation
+      - deception
+  C2:
+    label: "信念或知识差异 / false belief"
+    keywords:
+      - false belief
+      - belief reasoning
+      - knowledge difference
+      - knowledge access
+      - hidden object
+      - belief-consistent looking
+      - anticipatory looking
+      - preferential looking
+      - choose-the-ending
+      - CAToon
+      - physical causality
+  methodology:
+    label: "EEG / 眼动 / 动态材料方法学"
+    keywords:
+      - EEG
+      - eye tracking
+      - neural coupling
+      - TRF
+      - ISC
+      - brain-stimulus coupling
+      - motion energy
+      - saliency
+      - event boundary
+      - scene cuts
+      - low-level visual control
 
 thresholds:
   min_topic_fit_score: 50
@@ -20,32 +83,20 @@ positive_focus:
   - action prediction
   - social attribution
   - moving shapes
-  - Frith-Happe
-  - Heider-Simmel
-  - SAT-MC
-  - mSAT
   - false belief
   - belief reasoning
   - knowledge difference
-  - CAToon
-  - choose-the-ending
-  - belief-consistent looking
   - dynamic video
   - EEG eye-tracking alignment
 
 negative_focus:
-  - generic ASD diagnosis
   - AI diagnosis only
   - facial recognition only
-  - static facial emotion recognition
-  - broad visual attention diagnosis
-  - machine learning classification only
+  - visual attention diagnosis only
   - language intervention only
   - home-based intervention strategy
   - speech therapy
   - ADHD error monitoring only
   - generic ERP biomarker
-  - response or commentary article
-  - genetic or microbiome
-  - structural MRI classification
-  - intervention-only trial
+  - broad ASD classification
+  - response/commentary article

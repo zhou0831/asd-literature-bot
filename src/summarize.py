@@ -6,6 +6,7 @@ from pathlib import Path
 from collections import Counter
 import re
 
+from .diagnostics import SearchDiagnostics, build_search_diagnostics
 from .llm import generate_article_overview_with_mimo, generate_weekly_report_with_mimo
 from .models import LiteratureItem
 
@@ -18,20 +19,6 @@ class SummaryResult:
     relevance: str = ""
     limitations: str = ""
     ai_failed: bool = False
-
-
-@dataclass(frozen=True)
-class SearchDiagnostics:
-    raw_count: int = 0
-    deduped_count: int = 0
-    with_abstract_count: int = 0
-    without_abstract_count: int = 0
-    source_counts: Counter | None = None
-    module_counts: Counter | None = None
-    tier_counts: Counter | None = None
-    strong_exclusion_count: int = 0
-    strong_exclusions: list[LiteratureItem] | None = None
-    high_unselected: list[LiteratureItem] | None = None
 
 
 def render_daily_report(
@@ -164,23 +151,7 @@ def build_candidate_diagnostics(
     ranked_candidates: list[LiteratureItem],
     selected: LiteratureItem | None = None,
 ) -> SearchDiagnostics:
-    tier_counts = Counter(item.recommendation_tier or "background" for item in ranked_candidates)
-    return SearchDiagnostics(
-        raw_count=len(raw_candidates),
-        deduped_count=len(deduped_candidates),
-        with_abstract_count=sum(1 for item in deduped_candidates if item.abstract.strip()),
-        without_abstract_count=sum(1 for item in deduped_candidates if not item.abstract.strip()),
-        source_counts=Counter((item.source or "Unknown") for item in raw_candidates),
-        module_counts=Counter((item.module or "方法学") for item in ranked_candidates),
-        tier_counts=tier_counts,
-        strong_exclusion_count=sum(1 for item in ranked_candidates if item.strong_exclusion),
-        strong_exclusions=[item for item in ranked_candidates if item.strong_exclusion][:5],
-        high_unselected=[
-            item
-            for item in ranked_candidates
-            if selected is None or item.candidate_id != selected.candidate_id or item.title != selected.title
-        ][:5],
-    )
+    return build_search_diagnostics(raw_candidates, deduped_candidates, ranked_candidates, selected)
 
 
 def render_candidate_diagnostics(diagnostics: SearchDiagnostics | dict) -> str:
@@ -189,18 +160,18 @@ def render_candidate_diagnostics(diagnostics: SearchDiagnostics | dict) -> str:
     source_counts = diagnostics.source_counts or Counter()
     module_counts = diagnostics.module_counts or Counter()
     tier_counts = diagnostics.tier_counts or Counter()
-    strong_exclusions = diagnostics.strong_exclusions or []
-    high_unselected = diagnostics.high_unselected or []
+    strong_exclusions = diagnostics.excluded_preview or []
+    high_unselected = diagnostics.high_score_not_selected_preview or []
     module_order = ["A", "B", "C1", "C2", "方法学", "综述"]
     tier_order = ["core", "exploratory", "background"]
 
     lines = [
         "## 检索诊断",
         "",
-        f"- 原始候选数：{diagnostics.raw_count}",
-        f"- 去重后候选数：{diagnostics.deduped_count}",
-        f"- 有摘要候选数：{diagnostics.with_abstract_count}",
-        f"- 无摘要候选数：{diagnostics.without_abstract_count}",
+        f"- 原始候选数：{diagnostics.raw_candidate_count}",
+        f"- 去重后候选数：{diagnostics.deduped_candidate_count}",
+        f"- 有摘要候选数：{diagnostics.abstract_full_count}",
+        f"- 无摘要候选数：{diagnostics.abstract_missing_count}",
         "- 各来源候选数："
         + "；".join(f"{source} {source_counts.get(source, 0)}" for source in ["PubMed", "Europe PMC", "OpenAlex"]),
         "- 各模块候选数："
@@ -226,7 +197,7 @@ def render_candidate_diagnostics(diagnostics: SearchDiagnostics | dict) -> str:
 def render_weekly_report(items: list[LiteratureItem], report_date: date | None = None) -> str:
     today = report_date or date.today()
     ranked = sorted(items, key=_weekly_rank_key, reverse=True)
-    top = select_weekly_top(items)
+    top = select_weekly_top3(items)
     all_rows = "\n".join(
         f"- {idx}. {item.title} ({item.year or '年份待补充'}) - {_tier_label(item.recommendation_tier)} - {item.reading_priority} - {item.module} - score {item.recommendation_score}"
         for idx, item in enumerate(ranked, 1)
@@ -261,7 +232,7 @@ def render_weekly_report(items: list[LiteratureItem], report_date: date | None =
 """
 
 
-def select_weekly_top(items: list[LiteratureItem], limit: int = 3) -> list[LiteratureItem]:
+def select_weekly_top3(items: list[LiteratureItem], limit: int = 3) -> list[LiteratureItem]:
     eligible = [
         item
         for item in items
@@ -274,6 +245,10 @@ def select_weekly_top(items: list[LiteratureItem], limit: int = 3) -> list[Liter
     if not eligible:
         eligible = list(items)
     return sorted(eligible, key=_weekly_rank_key, reverse=True)[:limit]
+
+
+def select_weekly_top(items: list[LiteratureItem], limit: int = 3) -> list[LiteratureItem]:
+    return select_weekly_top3(items, limit)
 
 
 def summarize_weekly_in_chinese(items: list[LiteratureItem]) -> SummaryResult:

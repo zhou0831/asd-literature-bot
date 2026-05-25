@@ -10,7 +10,8 @@ research_profile:
   modules:
     A: "线索 / 代理检测"
     B: "目标导向动作理解"
-    C: "隐含意图 / 心智化"
+    C1: "隐含互动意图 / social attribution"
+    C2: "信念或知识差异 / false belief"
     methodology: "EEG、眼动、动态社会互动视频、低水平视觉控制"
     review: "综述 / 理论模型"
 
@@ -35,12 +36,14 @@ search:
       - '("contextual priors" OR "ambiguous kinematics" OR "predictive gaze") AND (action OR goal OR autism OR children)'
     C1:
       - '("social attribution" OR "moving shapes" OR "Frith-Happe" OR "Frith Happé" OR "Heider-Simmel" OR "animated triangles")'
-      - '("SAT-MC" OR "Social Attribution Task" OR mSAT OR "modified social attribution") AND (children OR autism OR autistic OR theory of mind)'
+      - '("SAT-MC" OR "Social Attribution Task" OR mSAT OR "modified social attribution") AND (children OR autism OR autistic OR "theory of mind")'
       - '("moving shapes" OR "animated shapes") AND (mentalizing OR "theory of mind" OR autism OR children)'
+      - '(helping OR chasing OR tricking OR teasing OR deception OR cooperation) AND ("social attribution" OR mentalizing OR "moving shapes")'
     C2:
       - '("false belief" OR "belief reasoning" OR "knowledge difference" OR "knowledge access") AND (autism OR autistic OR children)'
       - '("anticipatory looking" OR "preferential looking" OR "belief-consistent looking") AND ("false belief" OR belief) AND (autism OR children)'
       - '("CAToon" OR "choose-the-ending" OR "physical causality") AND ("theory of mind" OR mentalizing OR children)'
+      - '("deception cartoon" OR "silent false-belief" OR "false-belief cartoon") AND (children OR autism OR autistic)'
     methodology:
       - '("naturalistic stimuli" OR "dynamic social interaction" OR "social interaction video") AND (EEG OR "eye tracking" OR "brain-stimulus coupling" OR "neural tracking")'
       - '("temporal response function" OR TRF OR "intersubject correlation" OR ISC OR "neural coupling") AND ("social cognition" OR mentalizing OR "theory of mind" OR autism)'

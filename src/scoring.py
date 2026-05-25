@@ -192,6 +192,7 @@ def score_item(item: LiteratureItem) -> LiteratureItem:
         score += 1
     if item.abstract:
         score += 2
+    score += _query_family_bonus(item.query_family, text)
 
     penalties = _penalty_reasons(text)
     penalty_value = _penalty_value(penalties, text)
@@ -337,6 +338,15 @@ def _module_bonus(text: str) -> float:
     if _contains_any(text, ["eeg", "erp"]) and _has_core_social_context(text):
         bonus += 6
     return bonus
+
+
+def _query_family_bonus(query_family: str, text: str) -> float:
+    if query_family not in {"A", "B", "C1", "C2", "methodology"}:
+        return 0.0
+    family_terms = MODULE_TERMS.get("方法学" if query_family == "methodology" else query_family, [])
+    if any(_contains_term(text, term) for term in family_terms):
+        return 2.0
+    return 0.0
 
 
 def _is_strong_exclusion(reasons: list[str], text: str) -> bool:

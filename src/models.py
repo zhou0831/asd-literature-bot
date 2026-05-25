@@ -30,6 +30,7 @@ class LiteratureItem:
     abstract_source: str = ""
     metadata_sources: list[str] = field(default_factory=list)
     reading_priority: str = ""
+    query_family: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +58,7 @@ class LiteratureItem:
             "abstract_source": self.abstract_source,
             "metadata_sources": self.metadata_sources,
             "reading_priority": self.reading_priority,
+            "query_family": self.query_family,
         }
 
     @classmethod
@@ -86,4 +88,5 @@ class LiteratureItem:
             abstract_source=data.get("abstract_source", ""),
             metadata_sources=list(data.get("metadata_sources") or []),
             reading_priority=data.get("reading_priority", ""),
+            query_family=data.get("query_family", ""),
         )

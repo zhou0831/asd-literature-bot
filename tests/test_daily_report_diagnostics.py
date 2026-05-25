@@ -16,10 +16,10 @@ def test_daily_report_contains_metadata_status_and_search_diagnostics(monkeypatc
         module="A",
     )
     diagnostics = SearchDiagnostics(
-        raw_count=3,
-        deduped_count=2,
-        with_abstract_count=1,
-        without_abstract_count=1,
+        raw_candidate_count=3,
+        deduped_candidate_count=2,
+        abstract_full_count=1,
+        abstract_missing_count=1,
     )
 
     report = render_daily_report(item, candidate_diagnostics=diagnostics)

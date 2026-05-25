@@ -43,12 +43,13 @@ def search_all(config: dict[str, Any]) -> list[LiteratureItem]:
     for pool in pools:
         days_back = pool.get("days_back")
         max_results = int(pool.get("max_results_per_source") or search_cfg.get("max_results_per_source", 20))
-        for family, query in queries:
+        for family, query in _queries_for_pool(queries, pool):
             for searcher in (search_europe_pmc, search_openalex, search_pubmed):
                 try:
                     found = searcher(query, max_results, days_back)
                     for item in found:
                         _mark_metadata_source(item, item.source)
+                        item.query_family = family
                         item.module = _family_module(family) or item.module
                     items.extend(found)
                 except (requests.RequestException, ET.ParseError) as exc:
@@ -265,6 +266,7 @@ def _search_pools(search_cfg: dict[str, Any]) -> list[dict[str, int | None]]:
                     "name": "evergreen_pool",
                     "days_back": None,
                     "max_results_per_source": int(evergreen.get("max_results_per_run", 20)),
+                    "query_limit": int(evergreen.get("query_limit", 5)),
                 }
             )
         return out
@@ -287,6 +289,17 @@ def _family_module(family: str) -> str:
         "methodology": "方法学",
         "review": "综述",
     }.get(family, "")
+
+
+def _queries_for_pool(queries: list[tuple[str, str]], pool: dict[str, int | None]) -> list[tuple[str, str]]:
+    if pool.get("name") != "evergreen_pool":
+        return queries
+    if not queries:
+        return []
+    query_limit = int(pool.get("query_limit") or 5)
+    offset = date.today().toordinal() % len(queries)
+    rotated = queries[offset:] + queries[:offset]
+    return rotated[: min(query_limit, len(rotated))]
 
 
 def _mark_metadata_source(item: LiteratureItem, source: str) -> None:

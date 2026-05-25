@@ -26,3 +26,15 @@ def test_c2_catoon_false_belief_scores_high():
     assert item.module == "C2"
     assert item.topic_fit_score >= 50
     assert item.reading_priority in {"deep_read", "skim"}
+
+
+def test_broad_tom_language_proficiency_does_not_score_as_core_c():
+    item = score_item(
+        LiteratureItem(
+            title="Language proficiency and theory of mind in autistic children",
+            abstract="This longitudinal study examined language proficiency and broad theory of mind outcomes using parent questionnaires and vocabulary scores.",
+        )
+    )
+
+    assert item.topic_fit_score < 50
+    assert item.recommendation_tier != "core"
