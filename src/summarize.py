@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from collections import Counter
 import re
 
 from .llm import generate_article_overview_with_mimo, generate_weekly_report_with_mimo
@@ -19,11 +20,26 @@ class SummaryResult:
     ai_failed: bool = False
 
 
+@dataclass(frozen=True)
+class SearchDiagnostics:
+    raw_count: int = 0
+    deduped_count: int = 0
+    with_abstract_count: int = 0
+    without_abstract_count: int = 0
+    source_counts: Counter | None = None
+    module_counts: Counter | None = None
+    tier_counts: Counter | None = None
+    strong_exclusion_count: int = 0
+    strong_exclusions: list[LiteratureItem] | None = None
+    high_unselected: list[LiteratureItem] | None = None
+
+
 def render_daily_report(
     item: LiteratureItem,
     report_date: date | None = None,
     low_confidence: bool = False,
     alternatives: list[LiteratureItem] | None = None,
+    candidate_diagnostics: SearchDiagnostics | dict | None = None,
 ) -> str:
     today = report_date or date.today()
     authors = ", ".join(item.authors[:8]) if item.authors else "作者信息待补充"
@@ -36,6 +52,7 @@ def render_daily_report(
     tier = item.recommendation_tier or ("core" if not low_confidence else "exploratory")
     zotero_block = _zotero_block(import_command, tier)
     alternatives_block = _alternatives_block(alternatives or [], item)
+    diagnostics_block = render_candidate_diagnostics(candidate_diagnostics) if candidate_diagnostics else ""
     return f"""# ASD 文献每日推荐 - {today.isoformat()}
 
 ## 今日推荐类型
@@ -52,6 +69,14 @@ def render_daily_report(
 - URL：{item.url or "待补充"}
 - candidate_id：{item.candidate_id}
 
+## 元数据状态
+
+- 摘要状态：{item.abstract_status or _abstract_status(item)}
+- 摘要来源：{item.abstract_source or "待补充"}
+- 检索来源：{item.source or "待补充"}
+- 元数据来源：{", ".join(item.metadata_sources) or "待补充"}
+- 判断可靠性：{_metadata_reliability(item)}
+
 ## 为什么今天推荐它
 
 {_tier_reason(tier)}
@@ -61,9 +86,14 @@ def render_daily_report(
 - topic_fit_score：{item.topic_fit_score}
 - recommendation_score：{item.recommendation_score}
 - recommendation_tier：{tier}
+- reading_priority：{item.reading_priority}
 - module：{item.module}
 - penalty_reasons：{', '.join(item.penalty_reasons) or '无'}
 - strong_exclusion：{item.strong_exclusion}
+
+## 阅读优先级
+
+{item.reading_priority or "defer"}
 
 ## 文章讲了什么
 
@@ -86,6 +116,8 @@ def render_daily_report(
 {zotero_block}
 
 {alternatives_block}
+
+{diagnostics_block}
 
 {ai_note}
 """
@@ -126,12 +158,77 @@ def summarize_article_in_chinese(item: LiteratureItem) -> SummaryResult:
     return SummaryResult("\n\n".join([topic, design, result, relevance]), ai_generated=False, ai_failed=ai_failed)
 
 
+def build_candidate_diagnostics(
+    raw_candidates: list[LiteratureItem],
+    deduped_candidates: list[LiteratureItem],
+    ranked_candidates: list[LiteratureItem],
+    selected: LiteratureItem | None = None,
+) -> SearchDiagnostics:
+    tier_counts = Counter(item.recommendation_tier or "background" for item in ranked_candidates)
+    return SearchDiagnostics(
+        raw_count=len(raw_candidates),
+        deduped_count=len(deduped_candidates),
+        with_abstract_count=sum(1 for item in deduped_candidates if item.abstract.strip()),
+        without_abstract_count=sum(1 for item in deduped_candidates if not item.abstract.strip()),
+        source_counts=Counter((item.source or "Unknown") for item in raw_candidates),
+        module_counts=Counter((item.module or "方法学") for item in ranked_candidates),
+        tier_counts=tier_counts,
+        strong_exclusion_count=sum(1 for item in ranked_candidates if item.strong_exclusion),
+        strong_exclusions=[item for item in ranked_candidates if item.strong_exclusion][:5],
+        high_unselected=[
+            item
+            for item in ranked_candidates
+            if selected is None or item.candidate_id != selected.candidate_id or item.title != selected.title
+        ][:5],
+    )
+
+
+def render_candidate_diagnostics(diagnostics: SearchDiagnostics | dict) -> str:
+    if isinstance(diagnostics, dict):
+        diagnostics = SearchDiagnostics(**diagnostics)
+    source_counts = diagnostics.source_counts or Counter()
+    module_counts = diagnostics.module_counts or Counter()
+    tier_counts = diagnostics.tier_counts or Counter()
+    strong_exclusions = diagnostics.strong_exclusions or []
+    high_unselected = diagnostics.high_unselected or []
+    module_order = ["A", "B", "C1", "C2", "方法学", "综述"]
+    tier_order = ["core", "exploratory", "background"]
+
+    lines = [
+        "## 检索诊断",
+        "",
+        f"- 原始候选数：{diagnostics.raw_count}",
+        f"- 去重后候选数：{diagnostics.deduped_count}",
+        f"- 有摘要候选数：{diagnostics.with_abstract_count}",
+        f"- 无摘要候选数：{diagnostics.without_abstract_count}",
+        "- 各来源候选数："
+        + "；".join(f"{source} {source_counts.get(source, 0)}" for source in ["PubMed", "Europe PMC", "OpenAlex"]),
+        "- 各模块候选数："
+        + "；".join(f"{module} {module_counts.get(module, 0)}" for module in module_order),
+        "- 推荐层级候选数："
+        + "；".join(f"{tier} {tier_counts.get(tier, 0)}" for tier in tier_order)
+        + f"；strong_exclusion {diagnostics.strong_exclusion_count}",
+        "",
+        "### 被 strong_exclusion 排除的前 5 篇",
+    ]
+    if strong_exclusions:
+        lines.extend(_compact_candidate_line(item) for item in strong_exclusions)
+    else:
+        lines.append("- 无")
+    lines.extend(["", "### 未被选中的高分候选前 5 篇"])
+    if high_unselected:
+        lines.extend(_compact_candidate_line(item) for item in high_unselected)
+    else:
+        lines.append("- 无")
+    return "\n".join(lines)
+
+
 def render_weekly_report(items: list[LiteratureItem], report_date: date | None = None) -> str:
     today = report_date or date.today()
-    ranked = sorted(items, key=lambda row: row.recommendation_score, reverse=True)
-    top = ranked[:3]
+    ranked = sorted(items, key=_weekly_rank_key, reverse=True)
+    top = select_weekly_top(items)
     all_rows = "\n".join(
-        f"- {idx}. {item.title} ({item.year or '年份待补充'}) - {_tier_label(item.recommendation_tier)} - {item.module} - score {item.recommendation_score}"
+        f"- {idx}. {item.title} ({item.year or '年份待补充'}) - {_tier_label(item.recommendation_tier)} - {item.reading_priority} - {item.module} - score {item.recommendation_score}"
         for idx, item in enumerate(ranked, 1)
     ) or "- 本周暂无推荐记录。"
     weekly_insight = summarize_weekly_in_chinese(top)
@@ -164,6 +261,21 @@ def render_weekly_report(items: list[LiteratureItem], report_date: date | None =
 """
 
 
+def select_weekly_top(items: list[LiteratureItem], limit: int = 3) -> list[LiteratureItem]:
+    eligible = [
+        item
+        for item in items
+        if item.reading_priority != "exclude"
+        and not item.strong_exclusion
+        and not _weekly_excluded(item)
+    ]
+    if not eligible:
+        eligible = [item for item in items if item.reading_priority != "exclude" and not item.strong_exclusion]
+    if not eligible:
+        eligible = list(items)
+    return sorted(eligible, key=_weekly_rank_key, reverse=True)[:limit]
+
+
 def summarize_weekly_in_chinese(items: list[LiteratureItem]) -> SummaryResult:
     try:
         mimo_summary = generate_weekly_report_with_mimo(items)
@@ -174,7 +286,7 @@ def summarize_weekly_in_chinese(items: list[LiteratureItem]) -> SummaryResult:
         return SummaryResult(mimo_summary, ai_generated=True)
 
     top_rows = "\n\n".join(
-        f"### Top {idx}: {item.title}\n\n- candidate_id：{item.candidate_id}\n- 推荐类型：{_tier_label(item.recommendation_tier)}\n- 推荐理由：{item.reason}\n- 课题启发：优先检查它对 {item.module} 的操作化定义和实验材料。{_low_tier_weekly_note(item)}"
+        f"### Top {idx}: {item.title}\n\n- candidate_id：{item.candidate_id}\n- 推荐类型：{_tier_label(item.recommendation_tier)}\n- reading_priority：{item.reading_priority}\n- 入选原因：{_weekly_selection_reason(item)}\n- 推荐理由：{item.reason}\n- 课题启发：优先检查它对 {item.module} 的操作化定义和实验材料。{_low_tier_weekly_note(item)}"
         for idx, item in enumerate(items, 1)
     ) or "本周暂无足够候选。"
     return SummaryResult(top_rows, ai_generated=False)
@@ -217,7 +329,7 @@ def _learning_points_text(item: LiteratureItem, overview: SummaryResult) -> str:
         points.append("看它是否把 gaze cueing、joint attention 或代理线索拆成可操作的动态指标。")
     elif item.module == "B":
         points.append("看它如何定义动作目标、动作预测和意图线索，是否能映射到目标导向动作理解。")
-    elif item.module == "C":
+    elif item.module in {"C1", "C2"}:
         points.append("看它是否涉及 social attribution、false belief、ToM 或 mentalizing，可否支持隐含意图加工假设。")
     elif item.module == "方法学":
         points.append("看它的方法是否能服务于动态视频、EEG/眼动同步或时间序列指标，而不只是静态分类。")
@@ -231,11 +343,44 @@ def _learning_points_text(item: LiteratureItem, overview: SummaryResult) -> str:
 
 def _limitations_text(item: LiteratureItem) -> str:
     if item.strong_exclusion or item.low_confidence:
-        return (
-            "这篇文章只与眼动/视觉注意或 ASD 诊断背景相关，不直接涉及动态社会意图加工、"
-            "A/B/C 模块、H_intent/H_belief、EEG/眼动对齐。因此不建议作为今日核心精读文献。"
-        )
+        return _module_specific_low_confidence_note(item)
     return "自动日报只能基于题名、摘要和开放元数据初筛；正式阅读前仍需核对样本、任务材料、统计设计和全文结论。"
+
+
+def _abstract_status(item: LiteratureItem) -> str:
+    if len((item.abstract or "").strip()) >= 80:
+        return "full"
+    if item.abstract.strip():
+        return "metadata_only"
+    if item.title and any([item.year, item.venue, item.doi, item.url, item.authors]):
+        return "metadata_only"
+    if item.title:
+        return "title_only"
+    return "missing"
+
+
+def _metadata_reliability(item: LiteratureItem) -> str:
+    if item.abstract_status == "full" or len((item.abstract or "").strip()) >= 80:
+        return "中等：有可用摘要，但仍需打开全文复核任务和结果。"
+    if item.doi or item.pmid or item.pmcid:
+        return "偏低：有基础元数据，但摘要不足，建议只作初筛。"
+    return "低：元数据不足，不建议直接导入 Zotero。"
+
+
+def _module_specific_low_confidence_note(item: LiteratureItem) -> str:
+    if item.reading_priority == "exclude" or item.strong_exclusion:
+        return "这篇文章明显偏离当前课题核心，不建议精读，也不建议导入 Zotero。"
+    if item.module == "A":
+        return "这篇文章主要贴近 A 模块，即社会线索、共同注意或 gaze cue 的接入问题。它不一定涉及 C1/C2 或 H_intent/H_belief，但可作为社会入口任务或眼动指标参考。"
+    if item.module == "B":
+        return "这篇文章主要贴近 B 模块，即动作目标预测或 anticipatory gaze。它不一定涉及高阶心智化，但可为 H_goal 或 prediction readout 提供参考。"
+    if item.module == "C1":
+        return "这篇文章主要贴近 C1，即 social attribution / moving shapes / 隐含互动意图。重点复核它是否有低语言作答方式、动态刺激和可对齐的关键时间窗口。"
+    if item.module == "C2":
+        return "这篇文章主要贴近 C2，即 false belief / knowledge difference。重点复核它是否包含 belief-consistent looking、choose-the-ending 或低语言儿童友好 probe。"
+    if item.module == "方法学":
+        return "这篇文章主要是方法学参考，需要判断能否迁移到 EEG/眼动与 H(t) 对齐分析。"
+    return "这篇文章更像背景材料，需要先判断它是否真正服务当前任务设计、刺激材料或时序指标。"
 
 
 def _zotero_block(import_command: str, tier: str) -> str:
@@ -287,10 +432,29 @@ def _not_selected_reason(item: LiteratureItem, selected: LiteratureItem) -> str:
     return "与今日主推荐相比，课题贴合度或可读价值略低。"
 
 
+def _compact_candidate_line(item: LiteratureItem) -> str:
+    penalties = ", ".join(item.penalty_reasons) or "无"
+    return (
+        f"- {item.title} | module={item.module} | topic_fit={item.topic_fit_score} | "
+        f"score={item.recommendation_score} | tier={item.recommendation_tier} | "
+        f"reading_priority={item.reading_priority} | penalties={penalties}"
+    )
+
+
 def _low_tier_weekly_note(item: LiteratureItem) -> str:
     if item.recommendation_tier in {"exploratory", "background", "very_low_confidence"}:
         return " 这篇是低置信推荐，进入 Top 3 是因为本周候选池整体较弱，仍需人工复核。"
     return ""
+
+
+def _weekly_selection_reason(item: LiteratureItem) -> str:
+    if item.reading_priority == "deep_read":
+        return "达到 deep_read 优先级，且未被 strong_exclusion 排除，适合作为本周优先精读候选。"
+    if item.reading_priority == "skim":
+        return f"属于 skim 候选，但直接贴近 {item.module} 模块，可快速复核其任务、刺激或指标设计。"
+    if item.reading_priority == "defer":
+        return "本周候选池较弱，仅作背景补位；不建议直接导入 Zotero。"
+    return "仅作为检索记录保留，不建议进入精读。"
 
 
 def _weekly_discard_text(ranked: list[LiteratureItem], top: list[LiteratureItem]) -> str:
@@ -302,6 +466,50 @@ def _weekly_discard_text(ranked: list[LiteratureItem], top: list[LiteratureItem]
     for item in rest:
         rows.append(f"- {item.title}：{_tier_label(item.recommendation_tier)}，不建议导入 Zotero，除非人工复核后确认与课题直接相关。")
     return "\n".join(rows)
+
+
+def _weekly_rank_key(item: LiteratureItem) -> tuple:
+    priority_rank = {"deep_read": 4, "skim": 3, "defer": 1, "exclude": 0}
+    tier_rank = {"core": 4, "exploratory": 2, "background": 1, "very_low_confidence": 0}
+    direct_module = 2 if item.module in {"A", "B", "C1", "C2"} else 1 if item.module == "方法学" else 0
+    has_metadata = 1 if item.abstract.strip() or (item.doi and item.url) else 0
+    return (
+        priority_rank.get(item.reading_priority, 1),
+        tier_rank.get(item.recommendation_tier, 1),
+        direct_module,
+        has_metadata,
+        item.recommendation_score,
+        item.topic_fit_score,
+    )
+
+
+def _weekly_excluded(item: LiteratureItem) -> bool:
+    excluded_penalties = {
+        "generic_ai_diagnosis",
+        "facial_recognition_only",
+        "broad_visual_attention_diagnosis",
+        "generic_classification",
+        "intervention_only",
+        "language_intervention_only",
+        "adhd_error_monitoring_only",
+        "generic_erp_biomarker",
+        "response_commentary",
+        "diagnostic_scoping_review",
+    }
+    if any(reason in excluded_penalties for reason in item.penalty_reasons):
+        return True
+    text = f"{item.title} {item.abstract}".lower()
+    return any(
+        re.search(pattern, text)
+        for pattern in [
+            r"home[- ]based intervention",
+            r"speech therapy",
+            r"language strateg",
+            r"response to\b",
+            r"\bcommentary\b",
+            r"\badhd\b.*error monitoring",
+        ]
+    )
 
 
 def _clean_text(text: str) -> str:
@@ -363,7 +571,8 @@ def _relevance_sentence(item: LiteratureItem, text: str) -> str:
     module_map = {
         "A": "模块 A：线索 / 代理检测",
         "B": "模块 B：目标导向动作理解",
-        "C": "模块 C：隐含意图 / 心智化",
+        "C1": "模块 C1：社会归因 / moving shapes",
+        "C2": "模块 C2：错误信念 / 心智化",
         "方法学": "方法学：EEG、眼动、动态刺激或低水平视觉控制",
         "综述": "综述：理论框架和研究脉络整理",
     }

@@ -10,20 +10,46 @@ CORE_TERMS = {
     "dynamic social": 16,
     "social intention": 18,
     "social attribution": 18,
+    "heider simmel": 16,
+    "heider-simmel": 16,
+    "sat-mc": 18,
+    "msat": 16,
     "frith": 14,
     "happe": 14,
     "moving shapes": 18,
     "animated shapes": 16,
+    "animated triangles": 16,
+    "social attribution task": 16,
+    "modified social attribution": 14,
+    "helping": 8,
+    "chasing": 8,
+    "teasing": 8,
+    "tricking": 8,
+    "cooperation": 8,
+    "deception": 8,
     "theory of mind": 16,
     "mentalizing": 15,
     "false belief": 20,
     "false-belief": 20,
+    "belief reasoning": 16,
+    "knowledge difference": 14,
+    "knowledge access": 14,
+    "catoon": 16,
+    "choose-the-ending": 14,
+    "deception cartoon": 14,
+    "hidden object": 12,
+    "physical causality": 10,
+    "belief-consistent looking": 14,
+    "preferential looking": 10,
     "anticipatory looking": 14,
     "action prediction": 16,
     "goal directed": 14,
     "goal-directed": 14,
+    "hand object": 12,
+    "hand-object": 12,
     "joint attention": 22,
     "gaze cueing": 14,
+    "gesture cueing": 14,
     "gaze following": 14,
     "biological motion": 12,
     "social cue": 10,
@@ -34,15 +60,21 @@ CORE_TERMS = {
     "dynamic stimuli": 12,
     "eeg": 12,
     "erp": 8,
+    "neural tracking": 12,
+    "trf": 10,
+    "isc": 10,
+    "motion energy": 8,
+    "event boundary": 8,
     "eye tracking": 8,
     "eye-tracking": 8,
 }
 
 MODULE_TERMS = {
-    "A": ["joint attention", "gaze cueing", "gaze following", "agent", "biological motion", "social cue"],
-    "B": ["action prediction", "goal directed", "goal-directed", "intention", "movement", "gesture"],
-    "C": ["theory of mind", "mentalizing", "false belief", "false-belief", "social attribution", "frith", "happe"],
-    "方法学": ["eeg", "erp", "eye tracking", "eye-tracking", "video", "dynamic stimuli", "naturalistic"],
+    "A": ["joint attention", "gaze cueing", "gesture cueing", "gaze following", "agent", "biological motion", "social cue"],
+    "B": ["action prediction", "goal directed", "goal-directed", "intention", "movement", "gesture", "hand object", "hand-object"],
+    "C1": ["social attribution", "moving shapes", "animated shapes", "animated triangles", "frith", "happe", "heider simmel", "heider-simmel", "sat", "sat-mc", "msat", "helping", "chasing", "teasing", "tricking", "cooperation", "deception"],
+    "C2": ["false belief", "false-belief", "belief reasoning", "knowledge difference", "knowledge access", "deception cartoon", "hidden object", "belief-consistent looking", "anticipatory looking", "preferential looking", "choose-the-ending", "catoon", "physical causality"],
+    "方法学": ["eeg", "erp", "eye tracking", "eye-tracking", "video", "dynamic stimuli", "naturalistic", "neural tracking", "trf", "isc", "motion energy", "event boundary"],
     "综述": ["review", "meta-analysis", "scoping review", "model"],
 }
 
@@ -66,6 +98,8 @@ PENALTY_PATTERNS = {
     "generic_classification": [
         r"machine learning classification",
         r"\bclassification\b",
+        r"broad asd classification",
+        r"asd classification",
     ],
     "non_core_biomedical": [
         r"genetic",
@@ -78,6 +112,30 @@ PENALTY_PATTERNS = {
         r"therapy",
         r"treatment trial",
     ],
+    "language_intervention_only": [
+        r"language intervention",
+        r"language strateg",
+        r"language development",
+        r"home[- ]based intervention",
+        r"home[- ]based strateg",
+        r"speech therapy",
+    ],
+    "adhd_error_monitoring_only": [
+        r"\badhd\b.*error monitoring",
+        r"error[- ]related negativity",
+        r"\bern\b",
+    ],
+    "generic_erp_biomarker": [
+        r"erp biomarker",
+        r"eeg biomarker",
+        r"neural biomarker",
+    ],
+    "response_commentary": [
+        r"^response to\b",
+        r"\bcommentary\b",
+        r"\bletter to the editor\b",
+        r"\breply to\b",
+    ],
 }
 
 EXCLUSION_REASONS = {
@@ -87,6 +145,10 @@ EXCLUSION_REASONS = {
     "generic_classification",
     "non_core_biomedical",
     "intervention_only",
+    "language_intervention_only",
+    "adhd_error_monitoring_only",
+    "generic_erp_biomarker",
+    "response_commentary",
 }
 
 _PROFILE = load_research_profile()
@@ -144,11 +206,13 @@ def score_item(item: LiteratureItem) -> LiteratureItem:
     item.topic_fit_score = round(topic_fit, 2)
     item.recommendation_score = round(recommendation_score, 2)
     item.score = item.recommendation_score
-    item.module = choose_module(text)
+    hint = item.module if item.module in MODULE_TERMS else ""
+    item.module = choose_module(text, hint)
     item.penalty_reasons = penalties
     item.strong_exclusion = strong_exclusion
     item.low_confidence = not is_recommendable(item)
     item.recommendation_tier = recommendation_tier(item)
+    item.reading_priority = reading_priority(item)
     item.reason = "；".join(matched[:10]) if matched else "主题词匹配较少，需要人工复核"
     if penalties:
         item.reason = f"{item.reason}；降权：{'，'.join(penalties)}"
@@ -173,12 +237,24 @@ def recommendation_tier(item: LiteratureItem) -> str:
     return "background"
 
 
-def choose_module(text: str) -> str:
+def reading_priority(item: LiteratureItem) -> str:
+    if item.strong_exclusion:
+        return "exclude"
+    if is_recommendable(item):
+        return "deep_read" if item.abstract.strip() and item.module in {"A", "B", "C1", "C2", "方法学"} else "skim"
+    if item.recommendation_tier == "exploratory":
+        return "skim"
+    if item.recommendation_tier == "background":
+        return "defer"
+    return "exclude"
+
+
+def choose_module(text: str, hint: str = "") -> str:
     scores: dict[str, int] = {}
     for module, terms in MODULE_TERMS.items():
         scores[module] = sum(1 for term in terms if _contains_term(text, term))
     best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else "方法学"
+    return best if scores[best] > 0 else hint or "方法学"
 
 
 def _normalize(value: str) -> str:
@@ -209,7 +285,12 @@ def _has_core_social_context(text: str) -> bool:
             "naturalistic",
             "video",
             "gaze cueing",
+            "gesture cueing",
             "false belief",
+            "belief reasoning",
+            "moving shapes",
+            "sat-mc",
+            "msat",
         ],
     )
 
@@ -234,6 +315,10 @@ def _penalty_value(reasons: list[str], text: str) -> float:
             "generic_classification": 14,
             "non_core_biomedical": 30,
             "intervention_only": 18,
+            "language_intervention_only": 26,
+            "adhd_error_monitoring_only": 30,
+            "generic_erp_biomarker": 24,
+            "response_commentary": 35,
             "diagnostic_scoping_review": 18,
         }.get(reason, 10)
     if "review" in text and not _has_core_social_context(text):
@@ -243,9 +328,9 @@ def _penalty_value(reasons: list[str], text: str) -> float:
 
 def _module_bonus(text: str) -> float:
     bonus = 0.0
-    if _contains_any(text, ["social attribution", "false belief", "theory of mind", "mentalizing"]):
+    if _contains_any(text, ["social attribution", "moving shapes", "animated triangles", "sat-mc", "msat", "false belief", "belief reasoning", "knowledge difference", "catoon"]):
         bonus += 12
-    if _contains_any(text, ["joint attention", "gaze cueing", "gaze following"]):
+    if _contains_any(text, ["joint attention", "gaze cueing", "gesture cueing", "gaze following"]):
         bonus += 8
     if _contains_any(text, ["dynamic", "video", "moving shapes", "animated shapes", "naturalistic"]):
         bonus += 8
@@ -257,22 +342,35 @@ def _module_bonus(text: str) -> float:
 def _is_strong_exclusion(reasons: list[str], text: str) -> bool:
     if not any(reason in EXCLUSION_REASONS or reason == "diagnostic_scoping_review" for reason in reasons):
         return False
-    return not _contains_any(
+    return not _has_rescue_context(text)
+
+
+def _has_rescue_context(text: str) -> bool:
+    return _contains_any(
         text,
         [
             "dynamic social",
+            "dynamic social cognition",
             "social intention",
             "joint attention",
             "gaze cueing",
+            "gesture cueing",
             "gaze following",
             "theory of mind",
             "mentalizing",
             "social attribution",
             "false belief",
+            "belief reasoning",
             "action prediction",
             "moving shapes",
             "animated shapes",
             "naturalistic video",
-            "eeg",
+            "eye tracking process",
+            "time-resolved",
+            "eeg coupling",
+            "neural coupling",
+            "neural tracking",
+            "trf",
+            "isc",
         ],
     )

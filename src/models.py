@@ -26,6 +26,10 @@ class LiteratureItem:
     strong_exclusion: bool = False
     low_confidence: bool = False
     recommendation_tier: str = "core"
+    abstract_status: str = ""
+    abstract_source: str = ""
+    metadata_sources: list[str] = field(default_factory=list)
+    reading_priority: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +53,10 @@ class LiteratureItem:
             "strong_exclusion": self.strong_exclusion,
             "low_confidence": self.low_confidence,
             "recommendation_tier": self.recommendation_tier,
+            "abstract_status": self.abstract_status,
+            "abstract_source": self.abstract_source,
+            "metadata_sources": self.metadata_sources,
+            "reading_priority": self.reading_priority,
         }
 
     @classmethod
@@ -74,4 +82,8 @@ class LiteratureItem:
             strong_exclusion=bool(data.get("strong_exclusion") or False),
             low_confidence=bool(data.get("low_confidence") or False),
             recommendation_tier=data.get("recommendation_tier", "core"),
+            abstract_status=data.get("abstract_status", ""),
+            abstract_source=data.get("abstract_source", ""),
+            metadata_sources=list(data.get("metadata_sources") or []),
+            reading_priority=data.get("reading_priority", ""),
         )

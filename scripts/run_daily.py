@@ -11,10 +11,11 @@ sys.path.insert(0, str(ROOT))
 from src.config import load_config, path_from_config
 from src.dedupe import filter_duplicates
 from src.email_sender import can_send_email, send_email
+from src.enrich import enrich_metadata
 from src.scoring import is_recommendable, score_items
 from src.search import search_all
 from src.storage import Store
-from src.summarize import daily_subject, render_daily_report, write_report
+from src.summarize import build_candidate_diagnostics, daily_subject, render_daily_report, write_report
 from src.text_utils import short_hash
 from src.zotero_client import ZoteroClient
 
@@ -27,7 +28,14 @@ def select_daily_item(ranked):
         item.recommendation_tier = "core"
         item.low_confidence = False
         return item, "core"
-    item = next((candidate for candidate in ranked if not candidate.strong_exclusion), None)
+    item = next(
+        (
+            candidate
+            for candidate in ranked
+            if not candidate.strong_exclusion and getattr(candidate, "reading_priority", "skim") != "exclude"
+        ),
+        None,
+    )
     if item is not None:
         item.recommendation_tier = "exploratory" if item.topic_fit_score >= 35 or item.recommendation_score >= 45 else "background"
         item.low_confidence = True
@@ -50,8 +58,9 @@ def main() -> int:
 
         zotero = ZoteroClient()
         zotero_items = zotero.existing_items() if zotero.configured else []
-        candidates = search_all(config)
-        candidates = filter_duplicates(candidates, store.seen_keys(), zotero_items)
+        raw_candidates = search_all(config)
+        enriched_candidates = enrich_metadata(raw_candidates)
+        candidates = filter_duplicates(enriched_candidates, store.seen_keys(), zotero_items)
         ranked = score_items(candidates)
         if not ranked:
             body = "# ASD 文献每日推荐 - " + today + "\n\n今天没有检索到候选文献，因此不生成推荐，也不写入推荐历史。"
@@ -67,10 +76,16 @@ def main() -> int:
         item, tier = select_daily_item(ranked)
 
         item.candidate_id = f"{today}_{short_hash(item.doi or item.title)}"
+        diagnostics = build_candidate_diagnostics(raw_candidates, candidates, ranked, item)
         store.save_candidate(item)
         store.save_recommendation(item)
 
-        body = render_daily_report(item, low_confidence=(tier != "core"), alternatives=ranked[1:4])
+        body = render_daily_report(
+            item,
+            low_confidence=(tier != "core"),
+            alternatives=ranked[1:4],
+            candidate_diagnostics=diagnostics,
+        )
         filename = f"{today}.md"
         path = write_report(body, path_from_config(config, "daily_reports"), filename)
         print(f"Daily report written: {path}")

@@ -15,15 +15,38 @@ research_profile:
     review: "综述 / 理论模型"
 
 search:
-  days_back: 21
-  max_results_per_source: 20
-  queries:
-    - '(autism OR autistic OR ASD) AND ("social cognition" OR "social intention" OR mentalizing OR "theory of mind")'
-    - '(autism OR autistic OR ASD) AND ("biological motion" OR "action prediction" OR "goal directed action")'
-    - '(autism OR autistic OR ASD) AND ("joint attention" OR "gaze cueing" OR "social attribution")'
+  fresh_pool:
+    days_back: 180
+    max_results_per_source: 20
+  recent_pool:
+    years_back: 3
+    max_results_per_source: 20
+  evergreen_pool:
+    enabled: true
+    max_results_per_run: 20
+  query_families:
+    A:
+      - '(autism OR autistic OR ASD) AND ("joint attention" OR "gaze cueing" OR "gaze following" OR pointing OR "gesture cueing") AND (children OR child OR adolescent)'
+      - '("joint attention" OR "gaze cueing" OR "gesture cueing") AND ("eye tracking" OR pupillometry) AND (autism OR autistic OR children)'
+      - '(autism OR autistic OR ASD) AND ("biological motion" OR animacy OR agency OR chasing OR "self-propelled")'
+    B:
+      - '(autism OR autistic OR ASD) AND ("action prediction" OR "goal-directed action" OR "anticipatory gaze" OR "hand-object" OR "reach prediction")'
+      - '("goal-directed action" OR "action prediction" OR "anticipatory looking") AND (children OR child OR autism OR autistic)'
+      - '("contextual priors" OR "ambiguous kinematics" OR "predictive gaze") AND (action OR goal OR autism OR children)'
+    C1:
+      - '("social attribution" OR "moving shapes" OR "Frith-Happe" OR "Frith Happé" OR "Heider-Simmel" OR "animated triangles")'
+      - '("SAT-MC" OR "Social Attribution Task" OR mSAT OR "modified social attribution") AND (children OR autism OR autistic OR theory of mind)'
+      - '("moving shapes" OR "animated shapes") AND (mentalizing OR "theory of mind" OR autism OR children)'
+    C2:
+      - '("false belief" OR "belief reasoning" OR "knowledge difference" OR "knowledge access") AND (autism OR autistic OR children)'
+      - '("anticipatory looking" OR "preferential looking" OR "belief-consistent looking") AND ("false belief" OR belief) AND (autism OR children)'
+      - '("CAToon" OR "choose-the-ending" OR "physical causality") AND ("theory of mind" OR mentalizing OR children)'
+    methodology:
+      - '("naturalistic stimuli" OR "dynamic social interaction" OR "social interaction video") AND (EEG OR "eye tracking" OR "brain-stimulus coupling" OR "neural tracking")'
+      - '("temporal response function" OR TRF OR "intersubject correlation" OR ISC OR "neural coupling") AND ("social cognition" OR mentalizing OR "theory of mind" OR autism)'
+      - '("motion energy" OR saliency OR "event boundary" OR "scene cuts") AND ("social cognition" OR naturalistic OR EEG OR "eye tracking")'
 
 paths:
   database: data/recommended.sqlite
   daily_reports: reports/daily
   weekly_reports: reports/weekly
-
